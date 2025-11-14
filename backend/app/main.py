@@ -8,6 +8,7 @@ import re
 from .config import get_newsapi_key, get_gemini_api_key
 from .newsapi_client import fetch_news
 from .agents import POLLY, FLYNN, PIXEL, CATO
+from .news_helper import get_news_context
 
 
 app = FastAPI(title="News Nest API", version="0.1.0")
@@ -20,6 +21,48 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/test-news")
+def test_news_fetch(q: str = "sports"):
+    """Test endpoint to verify news fetching works."""
+    from .news_helper import fetch_relevant_news, summarize_news_for_agent
+    
+    api_key = get_newsapi_key()
+    if not api_key:
+        return {"error": "No NewsAPI key found. Set NEWSAPI_KEY in .env file"}
+    
+    print(f"[test-news] Testing news fetch for query: '{q}'")
+    news_data = fetch_relevant_news(q, days_back=3, max_articles=5)
+    
+    if not news_data:
+        return {"error": "Failed to fetch news", "api_key_set": bool(api_key)}
+    
+    articles_count = len(news_data.get("articles", []))
+    
+    if articles_count == 0:
+        return {
+            "success": False,
+            "message": "No articles found",
+            "api_key_set": bool(api_key),
+            "news_data_keys": list(news_data.keys()) if news_data else []
+        }
+    
+    # Try to summarize
+    gemini_key = get_gemini_api_key()
+    summary = summarize_news_for_agent(news_data, "Polly the Parrot", q, gemini_key)
+    
+    return {
+        "success": True,
+        "articles_count": articles_count,
+        "query": q,
+        "summary": summary,
+        "first_article": news_data.get("articles", [])[0] if news_data.get("articles") else None,
+        "api_keys": {
+            "newsapi": bool(api_key),
+            "gemini": bool(gemini_key)
+        }
+    }
 
 
 @app.get("/news")
@@ -140,8 +183,19 @@ async def chat_with_agent(request: ChatRequest):
         else:
             print(f"[chat_with_agent] No conversation history provided")
         
-        # Add current message
-        contents.append({"role": "user", "parts": [request.message]})
+        # Check if we should fetch current news for this message
+        print(f"[chat_with_agent] Checking news context for message: '{request.message}', agent: {agent.name}")
+        news_context = get_news_context(request.message, agent.name)
+        
+        # Add current message (with news context if available)
+        user_message = request.message
+        if news_context:
+            user_message = user_message + news_context
+            print(f"[chat_with_agent] Added news context to message (length: {len(news_context)} chars)")
+        else:
+            print(f"[chat_with_agent] No news context added")
+        
+        contents.append({"role": "user", "parts": [user_message]})
         print(f"[chat_with_agent] Total conversation context: {len(contents)} messages")
         
         # Check if this is the first message (no conversation history)
@@ -618,8 +672,19 @@ async def chat_with_routing(request: ChatRequest):
         else:
             print(f"[chat_and_route] No conversation history provided")
         
-        # Add current message
-        contents.append({"role": "user", "parts": [request.message]})
+        # Check if we should fetch current news for this message
+        print(f"[chat_and_route] Checking news context for message: '{request.message}', agent: {agent.name}")
+        news_context = get_news_context(request.message, agent.name)
+        
+        # Add current message (with news context if available)
+        user_message = request.message
+        if news_context:
+            user_message = user_message + news_context
+            print(f"[chat_and_route] Added news context to message (length: {len(news_context)} chars)")
+        else:
+            print(f"[chat_and_route] No news context added")
+        
+        contents.append({"role": "user", "parts": [user_message]})
         print(f"[chat_and_route] Total conversation context: {len(contents)} messages")
         
         # Check if this is the first message (no conversation history)
