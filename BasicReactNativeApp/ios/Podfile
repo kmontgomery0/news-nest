@@ -30,5 +30,71 @@ target 'BasicReactNativeApp' do
       config[:reactNativePath],
       :mac_catalyst_enabled => false
     )
+    
+    # Fix for Xcode 16+ compatibility with RCT-Folly
+    # Patch Time.h header files to prevent typedef redefinition errors
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |build_config|
+        # Suppress typedef redefinition warnings
+        build_config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
+        
+        # Add compiler flags to suppress errors
+        flags = ['-Wno-typedef-redefinition', '-Wno-error=typedef-redefinition']
+        
+        # Handle C++ flags
+        cxx_flags = build_config.build_settings['OTHER_CPLUSPLUSFLAGS'] || ['$(OTHER_CFLAGS)']
+        cxx_flags = [cxx_flags] unless cxx_flags.is_a?(Array)
+        cxx_flags = cxx_flags.dup
+        flags.each { |flag| cxx_flags << flag unless cxx_flags.include?(flag) }
+        build_config.build_settings['OTHER_CPLUSPLUSFLAGS'] = cxx_flags
+        
+        # Handle C flags
+        c_flags = build_config.build_settings['OTHER_CFLAGS'] || ['$(OTHER_CFLAGS)']
+        c_flags = [c_flags] unless c_flags.is_a?(Array)
+        c_flags = c_flags.dup
+        flags.each { |flag| c_flags << flag unless c_flags.include?(flag) }
+        build_config.build_settings['OTHER_CFLAGS'] = c_flags
+      end
+    end
+    
+    # Patch Time.h header files after pods are installed
+    begin
+      time_h_files = [
+        File.join(installer.sandbox.root, 'Headers', 'Private', 'RCT-Folly', 'folly', 'portability', 'Time.h'),
+        File.join(installer.sandbox.root, 'Headers', 'Public', 'RCT-Folly', 'folly', 'portability', 'Time.h'),
+        File.join(installer.sandbox.root, 'RCT-Folly', 'folly', 'portability', 'Time.h')
+      ]
+      
+      time_h_files.each do |time_h_path|
+        if File.exist?(time_h_path)
+          time_h_content = File.read(time_h_path)
+          # Patch to avoid typedef redefinition - skip typedef on Apple platforms where system defines it
+          # This fixes Xcode 16+ compatibility where clockid_t is already defined as an enum
+          if time_h_content.include?('typedef uint8_t clockid_t;')
+            # Find the section and replace the typedef with a conditional one
+            # Look for the pattern: #define CLOCK_THREAD_CPUTIME_ID 3 followed by typedef
+            if time_h_content.include?('CLOCK_THREAD_CPUTIME_ID 3')
+              # Replace the typedef block (handles various formats)
+              time_h_content.gsub!(
+                /#if\s+!defined\(_CLOCKID_T_DEFINED\)[\s\S]*?#endif\s*(?=extern "C" int clock_gettime)/,
+                ''
+              )
+              time_h_content.gsub!(
+                /(typedef uint8_t clockid_t;[\s\n]*)/,
+                ''
+              )
+              # Insert conditional typedef before extern declarations
+              time_h_content.gsub!(
+                /(#define CLOCK_THREAD_CPUTIME_ID 3\s*\n\s*)(extern "C" int clock_gettime)/,
+                "\\1#if !defined(_CLOCKID_T_DEFINED)\n  #if !defined(__APPLE__) || (defined(MAC_OS_X_VERSION_MAX_ALLOWED) && MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_12) || (defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED < __IPHONE_10_0)\n    typedef uint8_t clockid_t;\n  #endif\n  #define _CLOCKID_T_DEFINED\n#endif\n\\2"
+              )
+              File.write(time_h_path, time_h_content)
+            end
+          end
+        end
+      end
+    rescue => e
+      # Silently fail if patching doesn't work - compiler flags should handle it
+    end
   end
 end
