@@ -12,3 +12,13 @@ def get_newsapi_key() -> str:
     return ""
 
 
+def get_gemini_api_key() -> str:
+    """Fetch Gemini API key from environment/.env supporting common var names."""
+    load_dotenv()
+    for key_name in ("GEMINI_API_KEY", "GEMINI_KEY"):
+        value = os.getenv(key_name)
+        if value:
+            return value
+    return ""
+
+
