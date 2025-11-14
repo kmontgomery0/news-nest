@@ -2,7 +2,8 @@ from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+import re
 
 from .config import get_newsapi_key, get_gemini_api_key
 from .newsapi_client import fetch_news
@@ -58,6 +59,7 @@ def get_news(
 class ChatRequest(BaseModel):
     agent: str
     message: str
+    conversation_history: Optional[List[Dict[str, Any]]] = None
     api_key: Optional[str] = None
 
 
@@ -99,9 +101,53 @@ async def chat_with_agent(request: ChatRequest):
         )
     
     try:
-        # Format message as contents list for Gemini
-        contents = [{"role": "user", "parts": [request.message]}]
-        result = agent.respond(contents=contents, api_key=api_key)
+        # Build conversation history - include previous messages and current message
+        contents = []
+        
+        # Add conversation history if provided
+        if request.conversation_history:
+            print(f"[chat_with_agent] Received conversation history with {len(request.conversation_history)} items")
+            # Validate and add history messages
+            for item in request.conversation_history:
+                if isinstance(item, dict) and "role" in item and "parts" in item:
+                    # Ensure role is 'user' or 'model'
+                    role = item["role"]
+                    if role not in ["user", "model"]:
+                        # Try to map agent/user to model/user
+                        if role == "agent":
+                            role = "model"
+                        else:
+                            role = "user"
+                    
+                    # Ensure parts is a list
+                    parts = item["parts"]
+                    if not isinstance(parts, list):
+                        parts = [str(parts)]
+                    
+                    # Strip agent metadata from parts before sending to Gemini
+                    # Format: "text [Agent: Name]" -> "text"
+                    cleaned_parts = []
+                    for part in parts:
+                        part_str = str(part)
+                        # Remove [Agent: Name] metadata pattern
+                        cleaned = re.sub(r'\s*\[Agent:\s*[^\]]+\]\s*$', '', part_str, flags=re.IGNORECASE)
+                        cleaned_parts.append(cleaned.strip())
+                    
+                    contents.append({
+                        "role": role,
+                        "parts": cleaned_parts
+                    })
+        else:
+            print(f"[chat_with_agent] No conversation history provided")
+        
+        # Add current message
+        contents.append({"role": "user", "parts": [request.message]})
+        print(f"[chat_with_agent] Total conversation context: {len(contents)} messages")
+        
+        # Check if this is the first message (no conversation history)
+        is_first_message = not request.conversation_history or len(request.conversation_history) == 0
+        
+        result = agent.respond(contents=contents, api_key=api_key, is_first_message=is_first_message)
         
         return ChatResponse(
             agent=agent.name,
@@ -221,9 +267,79 @@ Respond ONLY with a JSON object in this exact format:
         raise HTTPException(status_code=500, detail=f"Error routing message: {str(exc)}")
 
 
+def detect_current_agent_from_history(conversation_history: Optional[List[Dict[str, Any]]] = None) -> Optional[str]:
+    """Detect which agent the user was last talking to based on conversation history."""
+    if not conversation_history or len(conversation_history) == 0:
+        return None
+    
+    # Look for agent names in the conversation history
+    # Agent names may appear in model responses (e.g., "Polly the Parrot: ..." or just in content)
+    agent_name_to_id = {
+        "polly": "polly",
+        "polly the parrot": "polly",
+        "flynn": "flynn",
+        "flynn the falcon": "flynn",
+        "pixel": "pixel",
+        "pixel the pigeon": "pixel",
+        "cato": "cato",
+        "cato the crane": "cato",
+    }
+    
+    # Check last few messages for agent mentions
+    # Look at the last model response to see which agent was talking
+    for item in reversed(conversation_history[-10:]):  # Check last 10 messages
+        if isinstance(item, dict) and item.get("role") == "model":
+            parts = item.get("parts", [])
+            if parts:
+                text = " ".join(parts) if isinstance(parts, list) else str(parts)
+                text_lower = text.lower()
+                
+                # Check if agent name appears in metadata format (e.g., "[Agent: Polly the Parrot]")
+                # This is how we encode agent names in conversation history
+                agent_metadata_pattern = r'\[agent:\s*([^\]]+)\]'
+                match = re.search(agent_metadata_pattern, text_lower)
+                if match:
+                    agent_name_found = match.group(1).strip()
+                    for agent_name, agent_id in agent_name_to_id.items():
+                        if agent_name in agent_name_found.lower():
+                            return agent_id
+                
+                # Check if agent name appears at start (e.g., "Polly the Parrot: ...")
+                for agent_name, agent_id in agent_name_to_id.items():
+                    if text_lower.startswith(agent_name.lower() + ":") or text_lower.startswith(agent_name.lower() + " "):
+                        return agent_id
+                
+                # Also check if agent name appears anywhere in the response
+                for agent_name, agent_id in agent_name_to_id.items():
+                    if agent_name in text_lower:
+                        return agent_id
+    
+    # Fallback: use keyword detection on last few messages
+    # Look at recent user messages to infer which agent they're talking to
+    recent_user_messages = [item for item in conversation_history[-6:] if isinstance(item, dict) and item.get("role") == "user"]
+    
+    if recent_user_messages:
+        # Check the most recent user message
+        last_user_msg = recent_user_messages[-1]
+        parts = last_user_msg.get("parts", [])
+        if parts:
+            text = " ".join(parts) if isinstance(parts, list) else str(parts)
+            text_lower = text.lower()
+            
+            # Quick keyword-based detection
+            if any(word in text_lower for word in ["sport", "game", "team", "player", "score", "football", "basketball", "soccer"]):
+                return "flynn"
+            elif any(word in text_lower for word in ["tech", "technology", "ai", "software", "app", "digital", "computer", "code"]):
+                return "pixel"
+            elif any(word in text_lower for word in ["politic", "election", "government", "policy", "vote", "civic"]):
+                return "cato"
+    
+    return None
+
+
 @app.post("/agents/route-only")
 async def route_only(request: ChatRequest):
-    """Quick routing endpoint that returns Polly's routing message immediately."""
+    """Smart routing endpoint using Gemini API to detect topic changes and route appropriately."""
     api_key = request.api_key or get_gemini_api_key()
     
     if not api_key:
@@ -232,57 +348,185 @@ async def route_only(request: ChatRequest):
             detail="GEMINI_API_KEY not set. Provide it in the request or set it in .env file."
         )
     
-    original_agent = request.agent.lower()
-    if original_agent != "polly" and original_agent in AGENTS:
-        # Not routing, just return empty routing message
+    # Detect current agent from conversation history
+    current_agent_id = detect_current_agent_from_history(request.conversation_history)
+    
+    # Build context for routing decision
+    conversation_context = ""
+    if request.conversation_history and len(request.conversation_history) > 0:
+        # Get last few messages for context (last 3-4 exchanges)
+        recent_messages = request.conversation_history[-6:]  # Last 6 items (3 exchanges)
+        context_parts = []
+        for item in recent_messages:
+            if isinstance(item, dict) and "role" in item and "parts" in item:
+                parts = item["parts"]
+                if not isinstance(parts, list):
+                    parts = [str(parts)]
+                # Strip agent metadata
+                text = " ".join(str(p) for p in parts)
+                text = re.sub(r'\s*\[Agent:\s*[^\]]+\]\s*$', '', text, flags=re.IGNORECASE)
+                role = "User" if item["role"] == "user" else "Assistant"
+                context_parts.append(f"{role}: {text.strip()}")
+        if context_parts:
+            conversation_context = "\n".join(context_parts)
+    
+    # Use Gemini API for intelligent routing based on topic detection
+    routing_prompt = f"""You are an intelligent router for a news conversation system. Analyze the user's message and the conversation context to determine which specialist agent should handle it.
+
+Available agents:
+- polly (Polly the Parrot): General news, headlines, greetings, general questions, non-specialized topics
+- flynn (Flynn the Falcon): Sports, games, athletics, scores, sports analysis, sports news, teams, players
+- pixel (Pixel the Pigeon): Technology, gadgets, AI, software, tech innovations, coding, digital products, tech news
+- cato (Cato the Crane): Politics, elections, government, policies, civic affairs, political news, governance
+
+Current conversation context:
+{conversation_context if conversation_context else "This is the start of the conversation."}
+
+Current message: "{request.message}"
+
+IMPORTANT ROUTING RULES:
+1. Detect ANY topic shift to a specialized domain - even subtle ones
+2. If the user asks about sports (even indirectly), route to flynn
+3. If the user asks about technology/tech (even indirectly), route to pixel
+4. If the user asks about politics/government (even indirectly), route to cato
+5. If continuing the same topic with the current specialist, stay with that specialist
+6. If the topic is general news or unclear, route to polly
+
+Respond ONLY with a JSON object in this exact format:
+{{
+    "suggested_agent": "agent_id (must be one of: polly/flynn/pixel/cato)",
+    "confidence": "high/medium/low",
+    "reasoning": "brief one-sentence explanation",
+    "needs_routing": true/false,
+    "topic_change": true/false
+}}"""
+    
+    try:
+        from .gemini import gemini_generate
+        contents = [{"role": "user", "parts": [routing_prompt]}]
+        result = gemini_generate(contents=contents, api_key=api_key)
+        response_text = result.get("text", "")
+        
+        # Try to extract JSON from response
+        import json
+        
+        # Find JSON in the response (handle cases where there's extra text)
+        json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response_text, re.DOTALL)
+        if json_match:
+            routing_data = json.loads(json_match.group())
+            suggested_agent_id = routing_data.get("suggested_agent", "polly").lower()
+            
+            # Validate the suggested agent exists
+            if suggested_agent_id not in AGENTS:
+                suggested_agent_id = "polly"
+            
+            # Check if we're already talking to this agent - if so, no routing needed
+            if current_agent_id == suggested_agent_id:
+                # Same agent, just continue the conversation
+                return {
+                    "needs_routing": False,
+                    "routing_message": None,
+                    "target_agent": suggested_agent_id
+                }
+            
+            # Check if routing is actually needed
+            needs_routing_flag = routing_data.get("needs_routing", True)
+            topic_change = routing_data.get("topic_change", False)
+            
+            # If no routing needed or staying with polly, return
+            if not needs_routing_flag or suggested_agent_id == "polly":
+                return {
+                    "needs_routing": False,
+                    "routing_message": None,
+                    "target_agent": suggested_agent_id
+                }
+            
+            # Different agent detected - prepare routing (but don't always announce)
+            suggested_agent = AGENTS[suggested_agent_id]
+            agent_names = {
+                "flynn": "Flynn the Falcon",
+                "pixel": "Pixel the Pigeon",
+                "cato": "Cato the Crane"
+            }
+            
+            # Only show routing message if there's a clear topic change
+            # For subtle shifts, route silently
+            routing_message = None
+            if topic_change and suggested_agent_id != "polly":
+                routing_messages = {
+                    "flynn": f"This sounds like something {agent_names['flynn']} can help you with! 🦅 He's our sports specialist—let me get him for you.",
+                    "pixel": f"This is right up {agent_names['pixel']}'s alley! 🐦 They're our tech expert—connecting you now.",
+                    "cato": f"{agent_names['cato']} would be perfect for this! 🦩 They specialize in politics and civics—routing you there now."
+                }
+                routing_message = routing_messages.get(suggested_agent_id, f"Let me connect you with {suggested_agent.name}!")
+            
+            return {
+                "needs_routing": True,
+                "routing_message": routing_message,  # May be None for silent routing
+                "target_agent": suggested_agent_id,
+                "target_agent_name": suggested_agent.name
+            }
+        else:
+            # Fallback: simple keyword-based routing if JSON parsing fails
+            message_lower = request.message.lower()
+            suggested_agent_id = "polly"
+            
+            if any(word in message_lower for word in ["sport", "game", "team", "player", "score", "football", "basketball", "soccer", "nba", "nfl", "baseball"]):
+                suggested_agent_id = "flynn"
+            elif any(word in message_lower for word in ["tech", "technology", "ai", "software", "app", "digital", "computer", "code", "programming", "gadget", "device"]):
+                suggested_agent_id = "pixel"
+            elif any(word in message_lower for word in ["politic", "election", "government", "policy", "vote", "civic", "senate", "congress", "president", "democrat", "republican"]):
+                suggested_agent_id = "cato"
+            
+            # Check if we're already talking to this agent
+            if current_agent_id == suggested_agent_id:
+                return {
+                    "needs_routing": False,
+                    "routing_message": None,
+                    "target_agent": suggested_agent_id
+                }
+            
+            if suggested_agent_id == "polly":
+                return {
+                    "needs_routing": False,
+                    "routing_message": None,
+                    "target_agent": "polly"
+                }
+            
+            # Different agent - silent routing
+            return {
+                "needs_routing": True,
+                "routing_message": None,  # Silent routing for better UX
+                "target_agent": suggested_agent_id,
+                "target_agent_name": AGENTS[suggested_agent_id].name
+            }
+            
+    except Exception as e:
+        # Fallback on error - use keyword matching
+        print(f"Error in intelligent routing, falling back to keywords: {str(e)}")
+        message_lower = request.message.lower()
+        suggested_agent_id = "polly"
+        
+        if any(word in message_lower for word in ["sport", "game", "team", "player", "score", "football", "basketball", "soccer", "nba", "nfl", "baseball"]):
+            suggested_agent_id = "flynn"
+        elif any(word in message_lower for word in ["tech", "technology", "ai", "software", "app", "digital", "computer", "code", "programming", "gadget", "device"]):
+            suggested_agent_id = "pixel"
+        elif any(word in message_lower for word in ["politic", "election", "government", "policy", "vote", "civic", "senate", "congress", "president", "democrat", "republican"]):
+            suggested_agent_id = "cato"
+        
+        if current_agent_id == suggested_agent_id:
+            return {
+                "needs_routing": False,
+                "routing_message": None,
+                "target_agent": suggested_agent_id
+            }
+        
         return {
-            "needs_routing": False,
-            "routing_message": None,
-            "target_agent": original_agent
+            "needs_routing": suggested_agent_id != "polly" and suggested_agent_id != current_agent_id,
+            "routing_message": None,  # Silent routing
+            "target_agent": suggested_agent_id,
+            "target_agent_name": AGENTS[suggested_agent_id].name if suggested_agent_id in AGENTS else "Polly the Parrot"
         }
-    
-    # Quick routing logic with simple keyword matching for speed
-    message_lower = request.message.lower()
-    suggested_agent_id = "polly"
-    
-    if any(word in message_lower for word in ["sport", "game", "team", "player", "score", "football", "basketball", "soccer", "nba", "nfl", "soccer", "baseball"]):
-        suggested_agent_id = "flynn"
-    elif any(word in message_lower for word in ["tech", "technology", "ai", "software", "app", "digital", "computer", "code", "programming", "gadget", "device"]):
-        suggested_agent_id = "pixel"
-    elif any(word in message_lower for word in ["politic", "election", "government", "policy", "vote", "civic", "senate", "congress", "president", "democrat", "republican"]):
-        suggested_agent_id = "cato"
-    
-    if suggested_agent_id == "polly":
-        # Stay with Polly, no routing needed
-        return {
-            "needs_routing": False,
-            "routing_message": None,
-            "target_agent": "polly"
-        }
-    
-    # Generate quick routing message from Polly
-    suggested_agent = AGENTS[suggested_agent_id]
-    agent_names = {
-        "flynn": "Flynn the Falcon",
-        "pixel": "Pixel the Pigeon",
-        "cato": "Cato the Crane"
-    }
-    
-    # Quick, friendly routing messages without API call for speed
-    routing_messages = {
-        "flynn": f"This sounds like something {agent_names['flynn']} can help you with! 🦅 He's our sports specialist—let me get him for you.",
-        "pixel": f"This is right up {agent_names['pixel']}'s alley! 🐦 They're our tech expert—connecting you now.",
-        "cato": f"{agent_names['cato']} would be perfect for this! 🦩 They specialize in politics and civics—routing you there now."
-    }
-    
-    routing_message = routing_messages.get(suggested_agent_id, f"Let me connect you with {suggested_agent.name}!")
-    
-    return {
-        "needs_routing": True,
-        "routing_message": routing_message,
-        "target_agent": suggested_agent_id,
-        "target_agent_name": suggested_agent.name
-    }
 
 
 @app.post("/agents/chat-and-route", response_model=ChatResponse)
@@ -296,23 +540,34 @@ async def chat_with_routing(request: ChatRequest):
             detail="GEMINI_API_KEY not set. Provide it in the request or set it in .env file."
         )
     
+    # Detect current agent from conversation history
+    current_agent_id = detect_current_agent_from_history(request.conversation_history)
+    
     # If agent is polly or message suggests routing, check if we should route
     original_agent = request.agent.lower()
-    should_route = (original_agent == "polly") or (original_agent not in AGENTS)
+    
+    # Always check routing - any message can potentially route to a different specialist
+    # This allows any agent to detect when the user wants to switch topics
+    route_info = await route_only(request)
     
     routing_message = None
     routed_from = None
-    target_agent_id = original_agent
+    target_agent_id = route_info["target_agent"]
     
-    if should_route:
-        # Quick routing check
-        route_info = await route_only(request)
-        if route_info["needs_routing"]:
-            routing_message = route_info["routing_message"]
-            routed_from = "polly"
-            target_agent_id = route_info["target_agent"]
+    # Only show routing message if one is provided (for topic changes)
+    # Silent routing happens when routing_message is None
+    if route_info["needs_routing"]:
+        # Check if we're actually switching agents
+        if current_agent_id and current_agent_id != target_agent_id:
+            # Different agent - only show routing message if provided (not silent routing)
+            routing_message = route_info.get("routing_message")  # May be None for silent routing
+            routed_from = current_agent_id
         else:
-            target_agent_id = route_info["target_agent"]
+            # Same agent or first message - no routing message needed
+            routing_message = None
+    else:
+        # No routing needed
+        routing_message = None
     
     # Chat with the determined agent
     if target_agent_id not in AGENTS:
@@ -324,8 +579,53 @@ async def chat_with_routing(request: ChatRequest):
     agent = AGENTS[target_agent_id]
     
     try:
-        contents = [{"role": "user", "parts": [request.message]}]
-        result = agent.respond(contents=contents, api_key=api_key)
+        # Build conversation history - include previous messages and current message
+        contents = []
+        
+        # Add conversation history if provided
+        if request.conversation_history:
+            print(f"[chat_and_route] Received conversation history with {len(request.conversation_history)} items")
+            # Validate and add history messages
+            for item in request.conversation_history:
+                if isinstance(item, dict) and "role" in item and "parts" in item:
+                    # Ensure role is 'user' or 'model'
+                    role = item["role"]
+                    if role not in ["user", "model"]:
+                        # Try to map agent/user to model/user
+                        if role == "agent":
+                            role = "model"
+                        else:
+                            role = "user"
+                    
+                    # Ensure parts is a list
+                    parts = item["parts"]
+                    if not isinstance(parts, list):
+                        parts = [str(parts)]
+                    
+                    # Strip agent metadata from parts before sending to Gemini
+                    # Format: "text [Agent: Name]" -> "text"
+                    cleaned_parts = []
+                    for part in parts:
+                        part_str = str(part)
+                        # Remove [Agent: Name] metadata pattern
+                        cleaned = re.sub(r'\s*\[Agent:\s*[^\]]+\]\s*$', '', part_str, flags=re.IGNORECASE)
+                        cleaned_parts.append(cleaned.strip())
+                    
+                    contents.append({
+                        "role": role,
+                        "parts": cleaned_parts
+                    })
+        else:
+            print(f"[chat_and_route] No conversation history provided")
+        
+        # Add current message
+        contents.append({"role": "user", "parts": [request.message]})
+        print(f"[chat_and_route] Total conversation context: {len(contents)} messages")
+        
+        # Check if this is the first message (no conversation history)
+        is_first_message = not request.conversation_history or len(request.conversation_history) == 0
+        
+        result = agent.respond(contents=contents, api_key=api_key, is_first_message=is_first_message)
         
         return ChatResponse(
             agent=agent.name,

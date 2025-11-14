@@ -1,213 +1,172 @@
-# Basic React Native App
+# News Nest React Native App
 
-A simple React Native application that runs on both iOS and Android platforms.
+AI-powered news conversation app built with React Native and TypeScript.
 
-## Features
+## Architecture
 
-- Cross-platform compatibility (iOS & Android)
-- TypeScript support
-- Simple counter example
-- Modern UI with beautiful styling
-- Hot reloading for fast development
+This React Native app communicates with a FastAPI backend server via HTTP REST API.
 
-## Prerequisites
-
-Before you begin, ensure you have the following installed on your system:
-
-### For Both Platforms:
-- **Node.js** (version 16 or newer)
-  - Download from [nodejs.org](https://nodejs.org/)
-  - Verify installation: `node --version`
-- **Watchman** (recommended for macOS)
-  - Install via Homebrew: `brew install watchman`
-
-### For iOS Development (macOS only):
-- **Xcode** (version 12 or newer)
-  - Install from the Mac App Store
-  - Install Xcode Command Line Tools: `xcode-select --install`
-- **CocoaPods**
-  - Install via: `sudo gem install cocoapods`
-  - Verify installation: `pod --version`
-
-### For Android Development:
-- **Android Studio**
-  - Download from [developer.android.com/studio](https://developer.android.com/studio)
-  - During installation, ensure the following are checked:
-    - Android SDK
-    - Android SDK Platform
-    - Android Virtual Device (AVD)
-- **Java Development Kit (JDK)**
-  - JDK 11 is recommended
-  - Set JAVA_HOME environment variable
-
-### Android Environment Setup:
-
-Add the following to your `~/.zshrc` or `~/.bash_profile`:
-
-```bash
-export ANDROID_HOME=$HOME/Library/Android/sdk
-export PATH=$PATH:$ANDROID_HOME/emulator
-export PATH=$PATH:$ANDROID_HOME/platform-tools
+```
+React Native App (Frontend)
+    ↕ HTTP REST API
+FastAPI Backend (Python)
+    ↕ Gemini API
+Google Gemini AI
 ```
 
-Then reload your shell configuration:
-```bash
-source ~/.zshrc  # or source ~/.bash_profile
-```
+## Setup
 
-## Installation
+### 1. Install Dependencies
 
-1. **Clone or navigate to the project directory:**
-   ```bash
-   cd /Users/krystalmontgomery/Documents/MIT/extra/BasicReactNativeApp
-   ```
-
-2. **Install dependencies:**
    ```bash
    npm install
    ```
 
-3. **Install iOS dependencies (macOS only):**
+For iOS, also install CocoaPods:
+
    ```bash
    cd ios
    pod install
    cd ..
    ```
 
-## Running the App
+### 2. Configure Backend Connection
 
-### Option 1: Using React Native CLI
+Edit `src/config/environment.ts` to set the API URL:
 
-#### For iOS (macOS only):
+- **iOS Simulator**: Uses `http://localhost:8000` (default)
+- **Android Emulator**: Uses `http://10.0.2.2:8000` (default)
+- **Physical Device**: Update to your computer's IP address (e.g., `http://192.168.1.100:8000`)
+
+To find your IP address:
+- **Mac/Linux**: Run `ifconfig | grep "inet "`
+- **Windows**: Run `ipconfig`
+
+### 3. Start Backend Server
+
+The backend must be running before starting the React Native app:
+
 ```bash
+# Navigate to backend directory
+cd ../backend
+
+# Activate virtual environment (if using one)
+source .venv/bin/activate
+
+# Start the FastAPI server
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+The `--host 0.0.0.0` flag allows the server to accept connections from other devices on your network.
+
+### 4. Start React Native App
+
+In a separate terminal:
+
+```bash
+# Start Metro bundler
+npm start
+
+# Run on iOS (in another terminal)
 npm run ios
-```
 
-Or specify a simulator:
-```bash
-npm run ios -- --simulator="iPhone 15 Pro"
-```
-
-#### For Android:
-First, start an Android emulator from Android Studio, or connect a physical device with USB debugging enabled.
-
-Then run:
-```bash
+# Or run on Android
 npm run android
 ```
-
-### Option 2: Manual Start
-
-1. **Start the Metro bundler:**
-   ```bash
-   npm start
-   ```
-
-2. **In a new terminal, run the app:**
-   - For iOS: `npm run ios`
-   - For Android: `npm run android`
-
-## Running on Physical Devices
-
-### iOS:
-1. Connect your iPhone via USB
-2. Open `ios/BasicReactNativeApp.xcworkspace` in Xcode
-3. Select your device from the device dropdown
-4. Click the Run button (or press Cmd+R)
-5. Trust the developer certificate on your device (Settings > General > Device Management)
-
-### Android:
-1. Enable Developer Options on your Android device:
-   - Go to Settings > About Phone
-   - Tap Build Number 7 times
-2. Enable USB Debugging in Developer Options
-3. Connect your device via USB
-4. Verify device connection: `adb devices`
-5. Run: `npm run android`
-
-## Development Tips
-
-### Reloading the App:
-- **iOS**: Press `Cmd+R` in the simulator
-- **Android**: Press `R` twice or shake the device and select "Reload"
-
-### Opening Developer Menu:
-- **iOS**: Press `Cmd+D` in the simulator
-- **Android**: Press `Cmd+M` (macOS) / `Ctrl+M` (Windows/Linux) or shake the device
-
-### Debugging:
-- Open the developer menu and select "Debug"
-- Chrome DevTools will open for debugging
-- Use `console.log()` statements to see output in the Metro bundler terminal
 
 ## Project Structure
 
 ```
 BasicReactNativeApp/
-├── android/                 # Android native code
-├── ios/                     # iOS native code
-├── node_modules/           # Dependencies
-├── App.tsx                 # Main application component
-├── index.js                # Application entry point
-├── package.json            # Dependencies and scripts
-├── app.json                # App configuration
-├── babel.config.js         # Babel configuration
-├── metro.config.js         # Metro bundler configuration
-├── tsconfig.json           # TypeScript configuration
-└── README.md              # This file
+├── App.tsx                    # Main app entry point
+├── src/
+│   ├── components/           # Reusable UI components
+│   │   ├── Header.tsx
+│   │   └── index.ts
+│   ├── screens/              # Screen components
+│   │   ├── ConversationScreen.tsx
+│   │   └── index.ts
+│   ├── services/             # API services
+│   │   └── api.ts           # Backend API calls
+│   ├── styles/               # StyleSheet definitions
+│   │   ├── conversationStyles.ts
+│   │   ├── headerStyles.ts
+│   │   └── index.ts
+│   ├── types/                # TypeScript types
+│   │   └── index.ts
+│   ├── constants/            # App constants
+│   │   └── api.ts           # API endpoints
+│   ├── config/               # Configuration
+│   │   └── environment.ts   # Environment settings
+│   └── utils/                # Utility functions
+│       └── textUtils.ts
 ```
 
 ## Troubleshooting
 
-### Metro Bundler Issues:
+### Backend Connection Issues
+
+**Error: "Failed to connect to backend"**
+
+1. Make sure the backend server is running:
+   ```bash
+   curl http://localhost:8000/agents/list
+   ```
+
+2. For physical devices, ensure:
+   - Backend server uses `--host 0.0.0.0` flag
+   - Your device and computer are on the same Wi-Fi network
+   - Update `src/config/environment.ts` with your computer's IP address
+   - Check that your firewall allows connections on port 8000
+
+3. For iOS physical device:
+   - Update `src/config/environment.ts` to use your IP instead of localhost
+   - Ensure Info.plist allows HTTP connections (already configured for localhost)
+
+### Metro Bundler Issues
+
+If Metro bundler has issues:
+
 ```bash
-# Clear cache and restart
 npm start -- --reset-cache
 ```
 
-### iOS Build Failures:
+### iOS Build Issues
+
+If you encounter build issues:
+
 ```bash
-# Clean build folder
 cd ios
-xcodebuild clean
-pod deintegrate
 pod install
 cd ..
+npm run ios
 ```
 
-### Android Build Failures:
-```bash
-# Clean Android build
-cd android
-./gradlew clean
-cd ..
-```
+## Development
 
-### Common Issues:
+### Adding New Screens
 
-1. **"Unable to resolve module"**: Run `npm install` and restart Metro bundler
-2. **iOS Simulator not starting**: Open Xcode and ensure simulators are installed
-3. **Android emulator not detected**: Check that `adb devices` shows your device/emulator
-4. **Port 8081 already in use**: Kill the Metro process: `lsof -ti:8081 | xargs kill`
+1. Create screen component in `src/screens/YourScreen.tsx`
+2. Create styles in `src/styles/yourScreenStyles.ts`
+3. Export from `src/screens/index.ts`
+4. Import and use in `App.tsx` or navigation setup
 
-## Next Steps
+### API Integration
 
-Now that you have a basic React Native app running, you can:
+All backend API calls go through `src/services/api.ts`. Add new API functions there.
 
-1. **Modify the UI**: Edit `App.tsx` to customize the interface
-2. **Add Navigation**: Install React Navigation for multi-screen apps
-3. **Add State Management**: Consider Redux or MobX for complex state
-4. **Add Icons**: Install react-native-vector-icons
-5. **Style Your App**: Explore styled-components or other styling solutions
+Available endpoints:
+- `POST /agents/chat-and-route` - Chat with automatic routing
+- `POST /agents/chat` - Direct chat with specific agent
+- `GET /agents/list` - List available agents
+- `GET /news` - Fetch news articles
 
-## Useful Resources
+## Backend Requirements
 
-- [React Native Documentation](https://reactnative.dev/docs/getting-started)
-- [React Native Directory](https://reactnative.directory/) - Find libraries
-- [Expo Documentation](https://docs.expo.dev/) - Alternative React Native framework
-- [React Native Community](https://github.com/react-native-community)
+The backend must be running and accessible at the URL specified in `src/config/environment.ts`.
 
-## License
+Required backend endpoints:
+- `/agents/chat-and-route` - Main chat endpoint with routing
+- `/agents/list` - List of available agents
 
-MIT License - feel free to use this app as a starting point for your projects!
-
+See `../backend/README.md` for backend setup instructions.
