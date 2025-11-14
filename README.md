@@ -53,6 +53,12 @@ python -m pip install -r backend/requirements.txt
 python -m uvicorn app.main:app --reload --factory --app-dir backend
 ```
 
+Option D - one line virtual environment:
+
+```
+backend/.venv/bin/python -m uvicorn app.main:app --reload --app-dir backend
+```
+
 API usage (examples):
 
 ```
