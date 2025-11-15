@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import re
 
-from .config import get_newsapi_key, get_gemini_api_key
+from .config import get_newsapi_key, get_gemini_api_key, get_env_debug
 from .newsapi_client import fetch_news
 from .agents import POLLY, FLYNN, PIXEL, CATO
 from .news_helper import get_news_context
@@ -65,6 +65,12 @@ def test_news_fetch(q: str = "sports"):
     }
 
 
+@app.get("/debug/env")
+def debug_env():
+    """Safe environment diagnostics (no secrets)."""
+    return get_env_debug()
+
+
 @app.get("/news")
 def get_news(
     q: Optional[str] = Query(None, description="Query string (keywords)"),
@@ -121,6 +127,24 @@ AGENTS = {
     "pixel": PIXEL,
     "cato": CATO,
 }
+
+@app.get("/agents/polly/welcome", response_model=ChatResponse)
+async def polly_welcome(api_key: Optional[str] = None):
+    """Return Polly's first welcome message with today's top headlines (no user message required)."""
+    agent = POLLY
+    key = api_key or get_gemini_api_key()
+    if not key:
+        raise HTTPException(
+            status_code=400,
+            detail="GEMINI_API_KEY not set. Provide it as a query param or set it in .env."
+        )
+    # Minimal starter content; PollyAgent will inject headlines on first message
+    contents: List[Dict[str, Any]] = [{"role": "user", "parts": ["Start"]}]
+    try:
+        result = agent.respond(contents=contents, api_key=key, is_first_message=True)
+        return ChatResponse(agent=agent.name, response=result.get("text", ""))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.post("/agents/chat", response_model=ChatResponse)
@@ -687,7 +711,7 @@ async def chat_with_routing(request: ChatRequest):
         contents.append({"role": "user", "parts": [user_message]})
         print(f"[chat_and_route] Total conversation context: {len(contents)} messages")
         
-        # Check if this is the first message (no conversation history)
+        # Determine if this is the first message (no conversation history)
         is_first_message = not request.conversation_history or len(request.conversation_history) == 0
         
         result = agent.respond(contents=contents, api_key=api_key, is_first_message=is_first_message)
@@ -971,7 +995,7 @@ async def test_page():
             <div class="chat-container" id="chatContainer">
                 <div class="message agent">
                     <div class="message-header">🦜 Polly the Parrot</div>
-                    <div>Welcome to News Nest! I'm Polly, your friendly news anchor. Ask me anything about today's news, and I'll automatically route your question to the best specialist agent. Or click on a specific agent card to chat directly with them!</div>
+                    <div>Welcome to News Nest! I'm Polly, your friendly news anchor. Ask me anything about today's news — or just say <em>\"headlines\"</em> and I'll share today's top 6 stories. You can also click on a specific agent card to chat directly with them.</div>
                 </div>
             </div>
             

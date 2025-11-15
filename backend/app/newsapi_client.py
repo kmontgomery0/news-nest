@@ -57,3 +57,38 @@ def fetch_news(
     return data
 
 
+def fetch_top_headlines(
+    api_key: str,
+    *,
+    country: Optional[str] = "us",
+    category: Optional[str] = None,
+    q: Optional[str] = None,
+    page_size: Optional[int] = 10,
+    page: Optional[int] = 1,
+) -> Dict[str, Any]:
+    """Call NewsAPI Top Headlines and return parsed JSON."""
+    if not api_key:
+        raise RuntimeError("Missing NewsAPI key.")
+
+    endpoint = "https://newsapi.org/v2/top-headlines"
+    params: Dict[str, Any] = {
+        "apiKey": api_key,
+        "pageSize": page_size,
+        "page": page,
+    }
+    if country:
+        params["country"] = country
+    if category:
+        params["category"] = category
+    if q:
+        params["q"] = q
+
+    response = requests.get(endpoint, params=params, timeout=20)
+    response.raise_for_status()
+    data = response.json()
+
+    if data.get("status") != "ok":
+        raise RuntimeError(f"NewsAPI returned error: {data}")
+
+    return data
+

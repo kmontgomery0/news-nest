@@ -2,7 +2,8 @@
 
 from typing import List, Dict, Any, Optional
 from .gemini import gemini_generate
-from .config import get_gemini_api_key
+from .config import get_gemini_api_key, get_newsapi_key
+from .newsapi_client import fetch_top_headlines
 
 
 class BaseAgent:
@@ -40,6 +41,78 @@ class PollyAgent(BaseAgent):
     
     def __init__(self):
         super().__init__("Polly the Parrot")
+    
+    def _detect_headlines_intent_and_sentiment(self, text: str, api_key: Optional[str]) -> Dict[str, Any]:
+        """Use LLM to infer if the user is asking for headlines and the sentiment."""
+        key = api_key or get_gemini_api_key()
+        if not key:
+            return {"wants_headlines": False, "sentiment": "neutral"}
+        prompt = f"""Analyze the user's message for intent and sentiment.
+User message: "{text}"
+
+Respond ONLY as JSON with keys:
+{{
+  "wants_headlines": true|false,  // true if the user is asking for top news/headlines/summary of today's news
+  "sentiment": "positive"|"neutral"|"negative"
+}}"""
+        try:
+            result = gemini_generate(contents=[{"role":"user","parts":[prompt]}], api_key=key)
+            import json, re
+            resp = result.get("text","")
+            match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
+            data = json.loads(match.group()) if match else {}
+            wants = bool(data.get("wants_headlines", False))
+            sent = str(data.get("sentiment", "neutral")).lower()
+            if sent not in ["positive","neutral","negative"]:
+                sent = "neutral"
+            return {"wants_headlines": wants, "sentiment": sent}
+        except Exception:
+            return {"wants_headlines": False, "sentiment": "neutral"}
+    
+    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False) -> Dict[str, Any]:
+        """If the user asks for headlines (LLM intent), fetch and provide top headlines as context."""
+        # Detect request intent (and sentiment, unused for now) from the latest user message
+        last_user_text = ""
+        for item in reversed(contents):
+            if isinstance(item, dict) and item.get("role") == "user":
+                parts = item.get("parts", [])
+                if parts:
+                    last_user_text = " ".join(str(p) for p in parts).strip()
+                    break
+        wants_headlines = False
+        if last_user_text:
+            intent = self._detect_headlines_intent_and_sentiment(last_user_text, api_key)
+            wants_headlines = bool(intent.get("wants_headlines", False))
+        if wants_headlines:
+            print("[PollyAgent] Detected request for headlines; attempting fetch...")
+            try:
+                news_key = get_newsapi_key()
+                if news_key:
+                    headlines_data = fetch_top_headlines(news_key, country="us", page_size=6)
+                    articles = headlines_data.get("articles", [])[:6]
+                    lines = []
+                    for i, a in enumerate(articles, start=1):
+                        title = (a.get("title") or "").strip()
+                        source = ((a.get("source") or {}).get("name") or "").strip()
+                        if title:
+                            if source:
+                                lines.append(f"{i}. {title} — {source}")
+                            else:
+                                lines.append(f"{i}. {title}")
+                    if lines:
+                        block = "Today's top headlines:\n" + "\n".join(lines)
+                        formatting_hint = (
+                            f"{block}\n\n"
+                            "Please present the items as a concise numbered list (one line per item), "
+                            "then end with a friendly question about which story to explore."
+                        )
+                        contents = [{"role": "user", "parts": [formatting_hint]}] + contents
+                        print(f"[PollyAgent] Injected {len(lines)} headlines into response context.")
+                else:
+                    print("[PollyAgent] NEWSAPI_KEY missing; cannot fetch headlines.")
+            except Exception:
+                print("[PollyAgent] Exception while fetching headlines; continuing without injection.", flush=True)
+        return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message)
     
     def get_system_prompt(self, is_first_message: bool = False) -> str:
         greeting_instruction = ""
@@ -82,6 +155,7 @@ class PollyAgent(BaseAgent):
             RESPONSE STYLE (CRITICAL):
             • ALWAYS start brief — give a quick overview (2-3 sentences max)
             • Provide breadth first, depth later — mention key points without going deep
+            • ALWAYS format news lists as concise numbered lists (one line per item)
             • ALWAYS end with a question asking what the user wants to learn more about
             • Examples: "Would you like to learn more about [specific aspect]?" or "What would you like to explore further?"
             • Keep initial responses under 100 words — save details for follow-ups

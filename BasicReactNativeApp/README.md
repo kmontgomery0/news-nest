@@ -32,15 +32,14 @@ For iOS, also install CocoaPods:
 
 ### 2. Configure Backend Connection
 
-Edit `src/config/environment.ts` to set the API URL:
-
-- **iOS Simulator**: Uses `http://localhost:8000` (default)
-- **Android Emulator**: Uses `http://10.0.2.2:8000` (default)
-- **Physical Device**: Update to your computer's IP address (e.g., `http://192.168.1.100:8000`)
+By default, the included client picks:
+- **iOS Simulator**: `http://localhost:8000`
+- **Android Emulator**: `http://10.0.2.2:8000`
+- **Physical Device**: Change `API_BASE` in `src/api/newsNest.js` to your computer's IP, e.g. `http://192.168.1.100:8000`
 
 To find your IP address:
-- **Mac/Linux**: Run `ifconfig | grep "inet "`
-- **Windows**: Run `ipconfig`
+- **macOS/Linux**: `ifconfig | grep "inet "`
+- **Windows**: `ipconfig`
 
 ### 3. Start Backend Server
 
@@ -153,13 +152,36 @@ npm run ios
 
 ### API Integration
 
-All backend API calls go through `src/services/api.ts`. Add new API functions there.
+Basic usage with Polly (top 10 headlines on first message are handled by backend):
 
-Available endpoints:
-- `POST /agents/chat-and-route` - Chat with automatic routing
-- `POST /agents/chat` - Direct chat with specific agent
+```tsx
+import { useState } from 'react';
+import { chatWithPolly } from './src/api/newsNest';
+
+export default function ExampleUsage() {
+  const [articlesPreview, setArticlesPreview] = useState('');
+
+  async function onPress() {
+    try {
+      const res = await chatWithPolly('What are the headlines today?');
+      // res.response contains Polly's formatted message
+      setArticlesPreview(res.response);
+    } catch (e) {
+      console.warn('Chat failed', e);
+    }
+  }
+
+  // Render a button and text using your UI components…
+  return null;
+}
+```
+
+Available backend endpoints you can call:
+- `POST /agents/chat` - Direct chat with an agent (`polly`, `flynn`, `pixel`, `cato`)
+- `POST /agents/route-only` - Get routing info, then call `/agents/chat` yourself
+- `POST /agents/chat-and-route` - Combined routing + response
 - `GET /agents/list` - List available agents
-- `GET /news` - Fetch news articles
+- `GET /news` - Fetch news articles (general fetch)
 
 ## Backend Requirements
 

@@ -28,7 +28,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     initialMessage || {
       id: '1',
       type: 'agent',
-      text: "Welcome to News Nest! I'm Polly, your friendly news anchor. Ask me anything about today's news, and I'll automatically route your question to the best specialist agent!",
+      text: "Welcome to News Nest! I'm Polly, your friendly news anchor. Ask me about today's top headlines! Or if you have something in mind to discuss,I'll automatically route your question to the best specialist agent!",
       agentName: 'Polly the Parrot',
     },
   ]);
@@ -62,7 +62,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       {
         id: '1',
         type: 'agent',
-        text: "Welcome to News Nest! I'm Polly, your friendly news anchor. Ask me anything about today's news, and I'll automatically route your question to the best specialist agent!",
+        text: "Welcome to News Nest! I'm Polly, your friendly news anchor. Ask me about today's top headlines! Or if you have something in mind to discuss,I'll automatically route your question to the best specialist agent!",
         agentName: 'Polly the Parrot',
       },
     ]);

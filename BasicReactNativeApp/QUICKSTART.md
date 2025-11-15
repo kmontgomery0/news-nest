@@ -19,12 +19,10 @@ cd ..
 
 This will create a `BasicReactNativeApp.xcworkspace` file in the ios folder.
 
-### 3. Start Metro Bundler
-In one terminal window, start the Metro bundler:
+### 3. Start Backend
+In one terminal window, start the Backend:
 
-```bash
-npm start
-```
+```/Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir /Users/tianajiang/6.s061/news-nest/backend```
 
 Keep this running in the background.
 
