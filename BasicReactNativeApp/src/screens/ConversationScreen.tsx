@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import {Message, ConversationHistoryItem} from '../types';
 import {sendMessage} from '../services/api';
@@ -413,6 +414,13 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       style={conversationStyles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+      {/* App-style Header with title and simple menu button */}
+      <View style={conversationStyles.headerContainer}>
+        <Text style={conversationStyles.headerTitle}>Chat with Polly the Parrot</Text>
+        <View style={conversationStyles.headerMenu}>
+          <View style={conversationStyles.headerMenuIcon} />
+        </View>
+      </View>
       {/* Restart Button */}
       {messages.length > 1 && (
         <View style={conversationStyles.restartButtonContainer}>
@@ -433,34 +441,64 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         showsVerticalScrollIndicator={true}>
         {messages.map(message => {
           const isStreaming = streamingMessage?.id === message.id;
-          
+          if (message.type === 'agent') {
+            return (
+              <View key={message.id} style={conversationStyles.messageRow}>
+                <View style={conversationStyles.parrotAvatar}>
+                  <Image
+                    source={require('../assets/parrot.jpeg')}
+                    resizeMode="cover"
+                    style={conversationStyles.parrotImageShift}
+                  />
+                </View>
+                <View
+                  style={[
+                    conversationStyles.messageContainer,
+                    conversationStyles.agentMessageContainer,
+                  ]}>
+                  {message.agentName && (
+                    <Text style={conversationStyles.agentName}>
+                      {message.isRouting ? '🔄 ' : ''}
+                      {message.agentName}
+                    </Text>
+                  )}
+                  <Text
+                    style={[
+                      conversationStyles.messageText,
+                      conversationStyles.agentMessageText,
+                    ]}>
+                    {message.text}
+                    {isStreaming && (
+                      <Text style={conversationStyles.streamingCursor}>▋</Text>
+                    )}
+                  </Text>
+                </View>
+              </View>
+            );
+          }
           return (
-            <View
-              key={message.id}
-              style={[
-                conversationStyles.messageContainer,
-                message.type === 'user'
-                  ? conversationStyles.userMessageContainer
-                  : conversationStyles.agentMessageContainer,
-              ]}>
-              {message.type === 'agent' && message.agentName && (
-                <Text style={conversationStyles.agentName}>
-                  {message.isRouting ? '🔄 ' : ''}
-                  {message.agentName}
-                </Text>
-              )}
-              <Text
+            <View key={message.id} style={conversationStyles.messageRow}>
+              <View style={conversationStyles.userAvatar}>
+                <Image
+                  source={require('../assets/profilePlaceholder.png')}
+                  resizeMode="cover"
+                  style={conversationStyles.userImageShift}
+                />
+              </View>
+              <View
                 style={[
-                  conversationStyles.messageText,
-                  message.type === 'user'
-                    ? conversationStyles.userMessageText
-                    : conversationStyles.agentMessageText,
+                  conversationStyles.messageContainer,
+                  conversationStyles.userMessageContainer,
                 ]}>
-                {message.text}
-                {isStreaming && (
-                  <Text style={conversationStyles.streamingCursor}>▋</Text>
-                )}
-              </Text>
+                <Text style={conversationStyles.userName}>You</Text>
+                <Text
+                  style={[
+                    conversationStyles.messageText,
+                    conversationStyles.userMessageText,
+                  ]}>
+                  {message.text}
+                </Text>
+              </View>
             </View>
           );
         })}

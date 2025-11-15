@@ -1,13 +1,19 @@
 import {StyleSheet} from 'react-native';
+import {
+  accent_indigo_color,
+  text_white_color,
+  text_white_muted_color,
+  shadow_black_color,
+} from './colors';
 
 export const headerStyles = StyleSheet.create({
   header: {
-    backgroundColor: '#667eea',
+    backgroundColor: accent_indigo_color,
     paddingVertical: 20,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
-    shadowColor: '#000',
+    shadowColor: shadow_black_color,
     shadowOffset: {
       width: 0,
       height: 2,
@@ -19,13 +25,13 @@ export const headerStyles = StyleSheet.create({
   headerTitle: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: 'white',
+    color: text_white_color,
     textAlign: 'center',
     marginBottom: 4,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: text_white_muted_color,
     textAlign: 'center',
   },
 });

@@ -1,21 +1,13 @@
 import React from 'react';
+// Header intentionally renders nothing (app-level header removed)
+// Keep file to avoid import errors where Header is used.
+// If you want a header again, implement it here and use across screens.
 import {View, Text} from 'react-native';
-import {headerStyles} from '../styles/headerStyles';
 
 interface HeaderProps {
   title?: string;
   subtitle?: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({
-  title = 'News Nest',
-  subtitle = 'AI-Powered News Conversation',
-}) => {
-  return (
-    <View style={headerStyles.header}>
-      <Text style={headerStyles.headerTitle}>{title}</Text>
-      {subtitle && <Text style={headerStyles.headerSubtitle}>{subtitle}</Text>}
-    </View>
-  );
-};
+export const Header: React.FC<HeaderProps> = () => null;
 
