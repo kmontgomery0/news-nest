@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Animated,
 } from 'react-native';
 import {Message, ConversationHistoryItem} from '../types';
 import {sendMessage} from '../services/api';
@@ -17,20 +18,49 @@ import {splitIntoParagraphs} from '../utils/textUtils';
 import {getInitialChunk, getNextChunk, splitIntoMessageChunks} from '../utils/messageUtils';
 import {API_BASE_URL} from '../constants/api';
 import {conversationStyles} from '../styles/conversationStyles';
+import {text_primary_brown_color} from '../styles/colors';
+import {BIRD_IMAGE_MAP, BIRD_IMAGE_SHIFTS} from '../constants/birds';
+import {Sidebar} from '../components/Sidebar';
 
 interface ConversationScreenProps {
   initialMessage?: Message;
+  selectedBird?: {
+    name: string;
+    welcomeMessage: string;
+    image: any;
+    agentName?: string;
+  };
+  userName?: string;
+  parrotName?: string;
+  onBack?: () => void;
+  onNavigateToHome?: () => void;
+  onNavigateToSettings?: () => void;
+  onNavigateToHistory?: () => void;
 }
 
 export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   initialMessage,
+  selectedBird,
+  userName = 'Nicole',
+  parrotName = 'Polly',
+  onBack,
+  onNavigateToHome,
+  onNavigateToSettings,
+  onNavigateToHistory,
 }) => {
+  // Use selected bird's welcome message if provided, otherwise use default with custom parrot name
+  const defaultWelcomeMessage = selectedBird
+    ? selectedBird.welcomeMessage
+    : `Welcome to News Nest! I'm ${parrotName}, your friendly news anchor. Ask me about today's top headlines! Or if you have something in mind to discuss,I'll automatically route your question to the best specialist agent!`;
+  
+  const defaultAgentName = selectedBird?.agentName || selectedBird?.name || `${parrotName} the Parrot`;
+
   const [messages, setMessages] = useState<Message[]>([
     initialMessage || {
       id: '1',
       type: 'agent',
-      text: "Welcome to News Nest! I'm Polly, your friendly news anchor. Ask me about today's top headlines! Or if you have something in mind to discuss,I'll automatically route your question to the best specialist agent!",
-      agentName: 'Polly the Parrot',
+      text: defaultWelcomeMessage,
+      agentName: defaultAgentName,
     },
   ]);
   const [inputText, setInputText] = useState('');
@@ -42,41 +72,57 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     remainingText: string;
   } | null>(null);
   const [pendingMessages, setPendingMessages] = useState<Message[]>([]);
+  const [currentAgent, setCurrentAgent] = useState<string>(defaultAgentName);
+  const [routingTo, setRoutingTo] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const streamingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const messageQueueIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const inputSlideAnim = useRef(new Animated.Value(100)).current;
 
-  // Restart conversation - clears all history and resets to initial state
-  const handleRestartConversation = useCallback(() => {
-    // Clear all intervals
-    if (streamingIntervalRef.current) {
-      clearInterval(streamingIntervalRef.current);
-      streamingIntervalRef.current = null;
-    }
-    if (messageQueueIntervalRef.current) {
-      clearInterval(messageQueueIntervalRef.current);
-      messageQueueIntervalRef.current = null;
-    }
+  // Format current date as "Nov 16, 2025"
+  const formatDate = (): string => {
+    const date = new Date();
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    const month = months[date.getMonth()];
+    const day = date.getDate();
+    const year = date.getFullYear();
+    return `${month} ${day}, ${year}`;
+  };
 
-    // Reset all state to initial values
-    setMessages([
-      {
-        id: '1',
-        type: 'agent',
-        text: "Welcome to News Nest! I'm Polly, your friendly news anchor. Ask me about today's top headlines! Or if you have something in mind to discuss,I'll automatically route your question to the best specialist agent!",
-        agentName: 'Polly the Parrot',
-      },
-    ]);
-    setInputText('');
-    setIsLoading(false);
-    setStreamingMessage(null);
-    setPendingMessages([]);
-    
-    // Scroll to top
-    setTimeout(() => {
-      scrollViewRef.current?.scrollTo({y: 0, animated: true});
-    }, 100);
-  }, []);
+  // Get bird image based on agent name
+  const getBirdImage = (agentName?: string): any => {
+    const name = agentName || currentAgent;
+    // Handle custom parrot name - map to Polly's image
+    if (name && name.includes('the Parrot') && name !== 'Polly the Parrot') {
+      return BIRD_IMAGE_MAP['Polly the Parrot'] || require('../assets/parrot.jpeg');
+    }
+    return BIRD_IMAGE_MAP[name] || selectedBird?.image || require('../assets/parrot.jpeg');
+  };
+
+  // Get bird image shift based on agent name
+  const getBirdImageShift = (agentName?: string): {left: number; top: number} => {
+    const name = agentName || currentAgent;
+    // Handle custom parrot name - use Polly's shift
+    if (name && name.includes('the Parrot') && name !== 'Polly the Parrot') {
+      return BIRD_IMAGE_SHIFTS['Polly the Parrot'] || {left: 5, top: 2};
+    }
+    return BIRD_IMAGE_SHIFTS[name] || {left: 5, top: 2};
+  };
+
+
+  // Input slide-in animation on mount
+  useEffect(() => {
+    Animated.timing(inputSlideAnim, {
+      toValue: 0,
+      duration: 300,
+      delay: 100,
+      useNativeDriver: true,
+    }).start();
+  }, [inputSlideAnim]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -227,7 +273,13 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     agentName: string,
     initialText: string,
     remainingText: string,
+    isRouting: boolean = false,
   ) => {
+    // Update current agent if this is not a routing message
+    if (!isRouting && agentName && agentName !== currentAgent) {
+      setCurrentAgent(agentName);
+    }
+    
     // Add initial chunk as a message
     const initialMessage: Message = {
       id,
@@ -335,39 +387,52 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     addMessage(userMessage);
     setInputText('');
     setIsLoading(true);
+    // Clear any previous routing indicator
+    setRoutingTo(null);
 
     try {
       // Send message with history (current message is NOT in history, backend will add it)
       // Debug: log history length to verify it's being sent
-      console.log(`Sending message with ${conversationHistory.length} history items`);
+      console.log(`Sending message with ${conversationHistory.length} history items, currentAgent: ${currentAgent}`);
       
-      const data = await sendMessage(message, conversationHistory);
-
-      // Show routing message if present (brief, one chunk)
-      if (data.routing_message) {
-        const routingChunk = getInitialChunk(data.routing_message);
-        const routingId = `routing-${Date.now()}`;
-        
-        if (routingChunk.remaining) {
-          startStreaming(
-            routingId,
-            'Polly the Parrot',
-            routingChunk.initial,
-            routingChunk.remaining,
-          );
-        } else {
-          addMessage({
-            id: routingId,
-            type: 'agent',
-            text: routingChunk.initial,
-            agentName: 'Polly the Parrot',
-            isRouting: true,
-          });
-        }
-      }
+      const data = await sendMessage(message, conversationHistory, 'polly', userName, parrotName);
 
       // Show agent response - split into multiple message bubbles
       const agentName = data.agent || 'Agent';
+      
+      // Check if we're routing to a different agent (before updating currentAgent)
+      // Use routed_from as the primary indicator, or check if agent changed
+      const isRouting = (data.routed_from || (agentName && agentName !== currentAgent));
+      
+      // Show routing indicator if switching to a different agent (while still loading)
+      if (isRouting && agentName && agentName !== currentAgent) {
+        console.log('[ConversationScreen] Showing routing indicator for:', agentName, 'from', currentAgent);
+        setRoutingTo(agentName);
+        // Update current agent state when routing
+        setCurrentAgent(agentName);
+        // Scroll to show routing indicator
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({animated: true});
+        }, 100);
+      } else if (agentName && agentName !== currentAgent) {
+        // Update current agent even if not routing (e.g., first message)
+        setCurrentAgent(agentName);
+      }
+      console.log('[ConversationScreen] Received response:', {
+        agent: agentName,
+        currentAgent,
+        routed_from: data.routed_from,
+        has_article_reference: data.has_article_reference,
+        responseLength: data.response?.length,
+        allKeys: Object.keys(data),
+        isRouting,
+        routingTo,
+      });
+      
+      // If routing, add a delay to show the routing message
+      const delayBeforeShowingMessage = isRouting && routingTo ? 1500 : 0;
+      
+      setTimeout(() => {
       const chunks = splitIntoMessageChunks(data.response);
       
       if (chunks.length > 1) {
@@ -376,7 +441,8 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           id: `agent-${Date.now()}-${index}`,
           type: 'agent',
           text: chunk,
-          agentName: index === 0 ? agentName : undefined, // Only show agent name on first message
+            agentName: index === 0 ? agentName : agentName, // Keep agent name for all chunks
+            hasArticleReference: data.has_article_reference && index === 0, // Only show on first chunk
         }));
         
         // Add first message immediately, queue the rest
@@ -391,8 +457,14 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           type: 'agent',
           text: chunks[0],
           agentName: agentName,
+            hasArticleReference: data.has_article_reference,
         });
       }
+        
+        // Clear routing indicator and loading state after messages are added
+        setRoutingTo(null);
+        setIsLoading(false);
+      }, delayBeforeShowingMessage);
     } catch (error) {
       const errorText = error instanceof Error
         ? error.message
@@ -409,30 +481,67 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     }
   };
 
+  const handleNavigate = (screen: 'home' | 'chat' | 'history' | 'settings') => {
+    if (screen === 'home') {
+      if (onNavigateToHome) {
+        onNavigateToHome();
+      } else if (onBack) {
+        onBack();
+      }
+    } else if (screen === 'settings' && onNavigateToSettings) {
+      onNavigateToSettings();
+    } else if (screen === 'chat') {
+      // Already on chat screen, no action needed
+    } else if (screen === 'history' && onNavigateToHistory) {
+      onNavigateToHistory();
+    }
+  };
+
   return (
-    <KeyboardAvoidingView
-      style={conversationStyles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-      {/* App-style Header with title and simple menu button */}
+    <View style={conversationStyles.container}>
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        userName={userName}
+        currentScreen="chat"
+        onNavigate={handleNavigate}
+      />
+      {/* App-style Header with title, back button, and menu button - Static */}
       <View style={conversationStyles.headerContainer}>
-        <Text style={conversationStyles.headerTitle}>Chat with Polly the Parrot</Text>
-        <View style={conversationStyles.headerMenu}>
-          <View style={conversationStyles.headerMenuIcon} />
+        <View style={conversationStyles.headerLeft}>
+          {onBack ? (
+            <TouchableOpacity
+              style={conversationStyles.headerButton}
+              onPress={onBack}>
+              <Image
+                source={require('../assets/back.png')}
+                style={conversationStyles.headerButtonImage}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+          ) : null}
         </View>
-      </View>
-      {/* Restart Button */}
-      {messages.length > 1 && (
-        <View style={conversationStyles.restartButtonContainer}>
+        <Text style={conversationStyles.headerTitle}>
+          {formatDate()}
+        </Text>
+        <View style={conversationStyles.headerRight}>
           <TouchableOpacity
-            style={conversationStyles.restartButton}
-            onPress={handleRestartConversation}
-            disabled={isLoading}>
-            <Text style={conversationStyles.restartButtonText}>🔄 Restart</Text>
+            style={conversationStyles.headerButton}
+            onPress={() => setIsSidebarOpen(true)}>
+            <Image
+              source={require('../assets/icons8-menu-100.png')}
+              style={conversationStyles.headerButtonImage}
+              resizeMode="contain"
+            />
           </TouchableOpacity>
         </View>
-      )}
+      </View>
       
+      {/* Content Area */}
+      <KeyboardAvoidingView
+        style={{flex: 1}}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
       {/* Conversation Box */}
       <ScrollView
         ref={scrollViewRef}
@@ -441,14 +550,30 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         showsVerticalScrollIndicator={true}>
         {messages.map(message => {
           const isStreaming = streamingMessage?.id === message.id;
+          // Skip routing messages - they're now shown as loading indicator
+          if (message.isRouting) {
+            return null;
+          }
           if (message.type === 'agent') {
+            // Use the agent name from the message to get bird image and shift
+            // This ensures each message shows the correct avatar for the agent who sent it
+            const messageAgent = message.agentName || currentAgent;
+            const birdImage = getBirdImage(messageAgent);
+            const imageShift = getBirdImageShift(messageAgent);
+            
             return (
               <View key={message.id} style={conversationStyles.messageRow}>
                 <View style={conversationStyles.parrotAvatar}>
                   <Image
-                    source={require('../assets/parrot.jpeg')}
+                    source={birdImage}
                     resizeMode="cover"
-                    style={conversationStyles.parrotImageShift}
+                    style={[
+                      conversationStyles.avatarImage,
+                      {
+                        left: imageShift.left,
+                        top: imageShift.top,
+                      },
+                    ]}
                   />
                 </View>
                 <View
@@ -472,6 +597,11 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
                       <Text style={conversationStyles.streamingCursor}>▋</Text>
                     )}
                   </Text>
+                  {message.hasArticleReference && (
+                    <View style={conversationStyles.articleTab}>
+                      <View style={conversationStyles.articleTabIndicator} />
+                    </View>
+                  )}
                 </View>
               </View>
             );
@@ -482,7 +612,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
                 <Image
                   source={require('../assets/profilePlaceholder.png')}
                   resizeMode="cover"
-                  style={conversationStyles.userImageShift}
+                  style={conversationStyles.userAvatarImage}
                 />
               </View>
               <View
@@ -505,16 +635,24 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         {isLoading && (
           <View style={conversationStyles.loadingContainer}>
             <ActivityIndicator size="small" color="#667eea" />
-            <Text style={conversationStyles.loadingText}>Thinking...</Text>
+            <Text style={conversationStyles.loadingText}>
+              {routingTo ? `Routing to ${routingTo}...` : 'Thinking...'}
+            </Text>
           </View>
         )}
       </ScrollView>
 
-      {/* Input Area */}
-      <View style={conversationStyles.inputContainer}>
+      {/* Input Area - Slides from bottom */}
+      <Animated.View
+        style={[
+          conversationStyles.inputContainer,
+          {
+            transform: [{translateY: inputSlideAnim}],
+          },
+        ]}>
         <TextInput
           style={conversationStyles.textInput}
-          placeholder="Ask me about the news..."
+          placeholder="your message here..."
           placeholderTextColor="#999"
           value={inputText}
           onChangeText={setInputText}
@@ -529,9 +667,14 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           ]}
           onPress={handleSendMessage}
           disabled={isLoading || !inputText.trim()}>
-          <Text style={conversationStyles.sendButtonText}>Send</Text>
+          <Image
+            source={require('../assets/icons8-up-100.png')}
+            style={conversationStyles.sendButtonImage}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
+      </Animated.View>
+      </KeyboardAvoidingView>
       </View>
-    </KeyboardAvoidingView>
   );
 };

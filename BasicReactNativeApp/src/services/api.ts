@@ -6,6 +6,8 @@ interface ChatRequest {
   message: string;
   conversation_history?: ConversationHistoryItem[];
   api_key?: string;
+  user_name?: string;
+  parrot_name?: string;
 }
 
 /**
@@ -21,6 +23,8 @@ export const sendMessage = async (
   message: string,
   conversationHistory: ConversationHistoryItem[] = [],
   agent: string = 'polly',
+  userName?: string,
+  parrotName?: string,
 ): Promise<ChatResponse> => {
   try {
     const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.CHAT_AND_ROUTE}`, {
@@ -32,6 +36,8 @@ export const sendMessage = async (
         agent,
         message,
         conversation_history: conversationHistory,
+        user_name: userName,
+        parrot_name: parrotName,
       } as ChatRequest),
     });
 

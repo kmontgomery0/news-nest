@@ -14,6 +14,11 @@ FastAPI Backend (Python)
 Google Gemini AI
 ```
 
+To kill Metro bundler process
+```
+lsof -ti:8081 | xargs kill -9
+```
+
 ## Setup
 
 ### 1. Install Dependencies

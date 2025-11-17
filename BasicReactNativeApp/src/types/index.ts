@@ -4,6 +4,7 @@ export interface Message {
   text: string;
   agentName?: string;
   isRouting?: boolean;
+  hasArticleReference?: boolean;
 }
 
 export interface ChatResponse {
@@ -12,6 +13,8 @@ export interface ChatResponse {
   error?: string;
   routing_message?: string;
   routed_from?: string;
+  has_article_reference?: boolean;
+  target_agent_name?: string;
 }
 
 export interface ConversationHistoryItem {

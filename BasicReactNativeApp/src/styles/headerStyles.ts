@@ -23,16 +23,18 @@ export const headerStyles = StyleSheet.create({
     elevation: 3,
   },
   headerTitle: {
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: 'bold',
     color: text_white_color,
     textAlign: 'center',
     marginBottom: 4,
+    fontFamily: 'Patrick Hand',
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: 16,
     color: text_white_muted_color,
     textAlign: 'center',
+    fontFamily: 'Patrick Hand',
   },
 });
 

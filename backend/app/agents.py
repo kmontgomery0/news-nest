@@ -12,26 +12,30 @@ class BaseAgent:
     def __init__(self, name: str):
         self.name = name
     
-    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False) -> Dict[str, Any]:
+    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> Dict[str, Any]:
         """Generate a response from the agent.
         
         Args:
             contents: List of conversation messages
             api_key: Gemini API key (optional)
             is_first_message: True if this is the first message in the conversation (no history)
+            user_name: The user's name (optional)
+            parrot_name: The parrot's name (optional)
         """
         if api_key is None:
             api_key = get_gemini_api_key()
         
-        system_prompt = self.get_system_prompt(is_first_message=is_first_message)
+        system_prompt = self.get_system_prompt(is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
         result = gemini_generate(contents=contents, system_prompt=system_prompt, api_key=api_key)
         return result
     
-    def get_system_prompt(self, is_first_message: bool = False) -> str:
+    def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
         """Return the system prompt for this agent. Override in subclasses.
         
         Args:
             is_first_message: True if this is the first message in the conversation
+            user_name: The user's name (optional)
+            parrot_name: The parrot's name (optional)
         """
         raise NotImplementedError
 
@@ -69,7 +73,7 @@ Respond ONLY as JSON with keys:
         except Exception:
             return {"wants_headlines": False, "sentiment": "neutral"}
     
-    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False) -> Dict[str, Any]:
+    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> Dict[str, Any]:
         """If the user asks for headlines (LLM intent), fetch and provide top headlines as context."""
         # Detect request intent (and sentiment, unused for now) from the latest user message
         last_user_text = ""
@@ -105,6 +109,7 @@ Respond ONLY as JSON with keys:
                             f"{block}\n\n"
                             "Please present the items as a concise numbered list (one line per item), "
                             "then end with a friendly question about which story to explore."
+                            "ALWAYS return exactly 5 headlines unless otherwise specified"
                         )
                         contents = [{"role": "user", "parts": [formatting_hint]}] + contents
                         print(f"[PollyAgent] Injected {len(lines)} headlines into response context.")
@@ -112,9 +117,9 @@ Respond ONLY as JSON with keys:
                     print("[PollyAgent] NEWSAPI_KEY missing; cannot fetch headlines.")
             except Exception:
                 print("[PollyAgent] Exception while fetching headlines; continuing without injection.", flush=True)
-        return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message)
+        return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
     
-    def get_system_prompt(self, is_first_message: bool = False) -> str:
+    def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
         greeting_instruction = ""
         if is_first_message:
             greeting_instruction = """
@@ -131,14 +136,18 @@ Respond ONLY as JSON with keys:
             • Act as if you've been talking with this user already
         """
 
+        # Use custom parrot name if provided, otherwise default to "Polly"
+        parrot_display_name = parrot_name if parrot_name else "Polly"
+        user_display_name = user_name if user_name else "user"
+
         return f"""
-            You are Polly the Parrot, the main host and router of the News Nest.
+            You are {parrot_display_name} the Parrot, the main host and router of the News Nest.
 
             FRAME (Genre):  
             Morning news anchor / friendly moderator for kids and teens.
 
             ENDS (Purpose):  
-            • Welcome users (only on first conversation)  
+            • Welcome {user_display_name} (only on first conversation)  
             • Offer approachable daily news headlines  
             • Route conversations to specialist birds when needed  
             • Keep the experience light, calm, and safe without trivializing news  
@@ -156,6 +165,8 @@ Respond ONLY as JSON with keys:
             • ALWAYS start brief — give a quick overview (2-3 sentences max)
             • Provide breadth first, depth later — mention key points without going deep
             • ALWAYS format news lists as concise numbered lists (one line per item)
+            • ALWAYS put in parenthesis the source of the article AND its general lean (political, or otherwise) (e.g. "1. Headline (source, liberal-leaning)")
+            • ALWAYS return exactly 5 headlines unless otherwise specified
             • ALWAYS end with a question asking what the user wants to learn more about
             • Examples: "Would you like to learn more about [specific aspect]?" or "What would you like to explore further?"
             • Keep initial responses under 100 words — save details for follow-ups
@@ -207,7 +218,7 @@ Respond ONLY as JSON with keys:
         except Exception:
             return {"wants_headlines": False}
     
-    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False) -> Dict[str, Any]:
+    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> Dict[str, Any]:
         """If the user asks for sports headlines, fetch and provide top sports headlines as context."""
         # Detect request intent from the latest user message
         last_user_text = ""
@@ -250,9 +261,9 @@ Respond ONLY as JSON with keys:
                     print("[FlynnAgent] NEWSAPI_KEY missing; cannot fetch sports headlines.")
             except Exception:
                 print("[FlynnAgent] Exception while fetching sports headlines; continuing without injection.", flush=True)
-        return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message)
+        return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
     
-    def get_system_prompt(self, is_first_message: bool = False) -> str:
+    def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
         # return """You are Flynn the Falcon, a sports commentator and post-game recap specialist.
         # Setting: A sports arena filled with energy — dynamic, fast-paced, and exciting.
         # Participants: You are the enthusiastic sports analyst delivering insights and highlights.
@@ -269,6 +280,8 @@ Respond ONLY as JSON with keys:
         # - Include specific scores, stats, or highlights when relevant
         # - Capture the excitement and drama of sports
         # - Use appropriate sports emojis"""
+
+        user_display_name = user_name if user_name else "user"
 
         return """
             You are Flynn the Falcon, the sports news specialist.
@@ -321,7 +334,7 @@ class PixelAgent(BaseAgent):
     def __init__(self):
         super().__init__("Pixel the Pigeon")
     
-    def get_system_prompt(self, is_first_message: bool = False) -> str:
+    def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
         # return """You are Pixel the Pigeon, a tech explainer and innovation digest specialist.
         # Setting: A modern tech workspace — clean, innovative, and approachable.
         # Participants: You are the curious tech guide making complex topics accessible to everyone.
@@ -339,6 +352,8 @@ class PixelAgent(BaseAgent):
         # - Avoid unnecessary jargon — if you use technical terms, explain them
         # - Focus on practical impact and why users should care
         # - Use tech emojis appropriately"""
+
+        user_display_name = user_name if user_name else "user"
 
         return """
             You are Pixel the Pigeon, the technology explainer.
@@ -389,7 +404,7 @@ class CatoAgent(BaseAgent):
     def __init__(self):
         super().__init__("Cato the Crane")
     
-    def get_system_prompt(self, is_first_message: bool = False) -> str:
+    def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
         # return """You are Cato the Crane, a civic commentator and editorial specialist.
         # Setting: A dignified public forum — thoughtful, balanced, and respectful.
         # Participants: You are the balanced commentator discussing policies, elections, and global affairs.
@@ -407,6 +422,8 @@ class CatoAgent(BaseAgent):
         # - Structure arguments clearly
         # - Promote civility and understanding
         # - Never be inflammatory or partisan"""
+
+        user_display_name = user_name if user_name else "user"
 
         return """
             You are Cato the Crane, the politics and civics explainer.

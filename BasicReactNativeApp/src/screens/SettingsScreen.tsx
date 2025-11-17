@@ -1,0 +1,278 @@
+import React, {useState, useEffect} from 'react';
+import {
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+  Image,
+} from 'react-native';
+import {Sidebar} from '../components/Sidebar';
+import {ProfileTab} from '../components/settings/ProfileTab';
+import {TopicsTab} from '../components/settings/TopicsTab';
+import {NotificationsTab} from '../components/settings/NotificationsTab';
+import {settingsStyles} from '../styles/settingsStyles';
+
+interface SettingsScreenProps {
+  userName?: string;
+  parrotName?: string;
+  selectedBirdIds?: string[];
+  initialTab?: 'profile' | 'topics' | 'notifications';
+  onNavigateToHome?: () => void;
+  onNavigateToHistory?: () => void;
+  onSaveProfile?: (name: string, parrotName: string) => void;
+  onSaveNests?: (birdIds: string[]) => void;
+}
+
+export const SettingsScreen: React.FC<SettingsScreenProps> = ({
+  userName = 'Nicole',
+  parrotName = 'Polly',
+  selectedBirdIds: propSelectedBirdIds = ['flynn', 'pixel', 'cato'],
+  initialTab = 'profile',
+  onNavigateToHome,
+  onNavigateToHistory,
+  onSaveProfile,
+  onSaveNests,
+}) => {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'profile' | 'topics' | 'notifications'>(initialTab);
+  
+  // Update active tab when initialTab prop changes
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+  
+  const [name, setName] = useState(userName);
+  const [email, setEmail] = useState('*****@gmail.com');
+  const [region, setRegion] = useState('');
+  const [day, setDay] = useState('');
+  const [month, setMonth] = useState('');
+  const [year, setYear] = useState('');
+  const [parrotNameState, setParrotNameState] = useState(parrotName);
+  
+  // Update local state when props change
+  useEffect(() => {
+    setName(userName);
+    setParrotNameState(parrotName);
+  }, [userName, parrotName]);
+  
+  const handleSaveProfile = () => {
+    if (onSaveProfile) {
+      onSaveProfile(name, parrotNameState);
+    }
+  };
+
+  const [selectedBirdIds, setSelectedBirdIds] = useState<string[]>(propSelectedBirdIds);
+  
+  // Update local state when props change
+  useEffect(() => {
+    setSelectedBirdIds(propSelectedBirdIds);
+  }, [propSelectedBirdIds]);
+  const [selectedTime, setSelectedTime] = useState('Morning (9AM)');
+  const [frequency, setFrequency] = useState('Thrice a day');
+  const [pushNotifications, setPushNotifications] = useState(true);
+  const [emailSummaries, setEmailSummaries] = useState(true);
+  const [dontPersonalize, setDontPersonalize] = useState(false);
+  const [allowChatHistory, setAllowChatHistory] = useState(true);
+  const [showTimeDropdown, setShowTimeDropdown] = useState(false);
+  const [showFrequencyDropdown, setShowFrequencyDropdown] = useState(false);
+
+  const timeOptions = [
+    'Morning (9AM)',
+    'Afternoon (1PM)',
+    'Evening (5PM)',
+    'Night (9PM)',
+    'Custom',
+  ];
+
+  const frequencyOptions = [
+    'Once a day',
+    'Twice a day',
+    'Three times a day',
+    'Four times a day',
+    'Custom',
+  ];
+
+  const handleBirdToggle = (birdId: string) => {
+    if (selectedBirdIds.includes(birdId)) {
+      setSelectedBirdIds(selectedBirdIds.filter(id => id !== birdId));
+    } else {
+      setSelectedBirdIds([...selectedBirdIds, birdId]);
+    }
+  };
+
+  const handleSaveParrotName = () => {
+    // Save the parrot name
+    if (onSaveProfile) {
+      onSaveProfile(name, parrotNameState);
+    }
+  };
+
+  // Auto-save nests when they change
+  useEffect(() => {
+    if (onSaveNests) {
+      onSaveNests(selectedBirdIds);
+    }
+  }, [selectedBirdIds, onSaveNests]);
+
+  const handleTimeSelect = (time: string) => {
+    setSelectedTime(time);
+    setShowTimeDropdown(false);
+  };
+
+  const handleFrequencySelect = (freq: string) => {
+    setFrequency(freq);
+    setShowFrequencyDropdown(false);
+  };
+
+  const handleTimeDropdownToggle = () => {
+    setShowTimeDropdown(!showTimeDropdown);
+    setShowFrequencyDropdown(false);
+  };
+
+  const handleFrequencyDropdownToggle = () => {
+    setShowFrequencyDropdown(!showFrequencyDropdown);
+    setShowTimeDropdown(false);
+  };
+
+  const handleNavigate = (screen: 'home' | 'chat' | 'history' | 'settings') => {
+    if (screen === 'home' && onNavigateToHome) {
+      onNavigateToHome();
+    } else if (screen === 'history' && onNavigateToHistory) {
+      onNavigateToHistory();
+    }
+  };
+
+  return (
+    <View style={settingsStyles.container}>
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        userName={userName}
+        currentScreen="settings"
+        onNavigate={handleNavigate}
+      />
+      
+      {/* Header */}
+      <View style={settingsStyles.headerContainer}>
+        <View style={settingsStyles.headerLeft} />
+        <Text style={settingsStyles.headerTitle}>Settings</Text>
+        <View style={settingsStyles.headerRight}>
+          <TouchableOpacity
+            style={settingsStyles.headerButton}
+            onPress={() => setIsSidebarOpen(true)}>
+            <Image
+              source={require('../assets/icons8-menu-100.png')}
+              style={settingsStyles.headerButtonImage}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Tab Navigation */}
+      <View style={settingsStyles.tabBar}>
+        <TouchableOpacity
+          style={[
+            settingsStyles.tabButton,
+            activeTab === 'profile' && settingsStyles.tabButtonActive,
+            {borderLeftWidth: 1},
+          ]}
+          onPress={() => setActiveTab('profile')}>
+          <Text
+            style={[
+              settingsStyles.tabButtonText,
+              activeTab === 'profile' && settingsStyles.tabButtonTextActive,
+            ]}>
+            Profile
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            settingsStyles.tabButton,
+            activeTab === 'topics' && settingsStyles.tabButtonActive,
+          ]}
+          onPress={() => setActiveTab('topics')}>
+                <Text
+                  style={[
+                    settingsStyles.tabButtonText,
+                    activeTab === 'topics' && settingsStyles.tabButtonTextActive,
+                  ]}>
+                  My Nests
+                </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            settingsStyles.tabButton,
+            activeTab === 'notifications' && settingsStyles.tabButtonActive,
+            {borderRightWidth: 1},
+          ]}
+          onPress={() => setActiveTab('notifications')}>
+          <Text
+            style={[
+              settingsStyles.tabButtonText,
+              activeTab === 'notifications' && settingsStyles.tabButtonTextActive,
+            ]}>
+            Notifications
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        style={settingsStyles.scrollView}
+        contentContainerStyle={settingsStyles.scrollContent}
+        onScrollBeginDrag={() => {
+          setShowTimeDropdown(false);
+          setShowFrequencyDropdown(false);
+        }}>
+        {activeTab === 'profile' && (
+          <ProfileTab
+            name={name}
+            email={email}
+            region={region}
+            day={day}
+            month={month}
+            year={year}
+            onNameChange={setName}
+            onEmailChange={setEmail}
+            onRegionChange={setRegion}
+            onDayChange={setDay}
+            onMonthChange={setMonth}
+            onYearChange={setYear}
+            onSave={handleSaveProfile}
+          />
+        )}
+        {activeTab === 'topics' && (
+          <TopicsTab
+            selectedBirdIds={selectedBirdIds}
+            onBirdToggle={handleBirdToggle}
+            parrotName={parrotNameState}
+            onParrotNameChange={setParrotNameState}
+            onSaveParrotName={handleSaveParrotName}
+          />
+        )}
+        {activeTab === 'notifications' && (
+          <NotificationsTab
+            selectedTime={selectedTime}
+            frequency={frequency}
+            pushNotifications={pushNotifications}
+            emailSummaries={emailSummaries}
+            dontPersonalize={dontPersonalize}
+            allowChatHistory={allowChatHistory}
+            showTimeDropdown={showTimeDropdown}
+            showFrequencyDropdown={showFrequencyDropdown}
+            timeOptions={timeOptions}
+            frequencyOptions={frequencyOptions}
+            onTimeDropdownToggle={handleTimeDropdownToggle}
+            onFrequencyDropdownToggle={handleFrequencyDropdownToggle}
+            onTimeSelect={handleTimeSelect}
+            onFrequencySelect={handleFrequencySelect}
+            onPushNotificationsChange={setPushNotifications}
+            onEmailSummariesChange={setEmailSummaries}
+            onDontPersonalizeChange={setDontPersonalize}
+            onAllowChatHistoryChange={setAllowChatHistory}
+          />
+        )}
+      </ScrollView>
+    </View>
+  );
+};

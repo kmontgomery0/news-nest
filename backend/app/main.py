@@ -110,6 +110,8 @@ class ChatRequest(BaseModel):
     message: str
     conversation_history: Optional[List[Dict[str, Any]]] = None
     api_key: Optional[str] = None
+    user_name: Optional[str] = None
+    parrot_name: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -118,6 +120,7 @@ class ChatResponse(BaseModel):
     error: Optional[str] = None
     routing_message: Optional[str] = None
     routed_from: Optional[str] = None
+    has_article_reference: Optional[bool] = False
 
 
 # Agent mapping
@@ -225,11 +228,26 @@ async def chat_with_agent(request: ChatRequest):
         # Check if this is the first message (no conversation history)
         is_first_message = not request.conversation_history or len(request.conversation_history) == 0
         
-        result = agent.respond(contents=contents, api_key=api_key, is_first_message=is_first_message)
+        result = agent.respond(
+            contents=contents, 
+            api_key=api_key, 
+            is_first_message=is_first_message,
+            user_name=request.user_name,
+            parrot_name=request.parrot_name
+        )
+        
+        has_ref = result.get("has_article_reference", False)
+        print(f"[chat_with_agent] Result has_article_reference={has_ref}, result keys: {list(result.keys())}")
+        
+        # Use custom parrot name if provided and agent is Polly
+        agent_display_name = agent.name
+        if agent_name == "polly" and request.parrot_name:
+            agent_display_name = f"{request.parrot_name} the Parrot"
         
         return ChatResponse(
-            agent=agent.name,
+            agent=agent_display_name,
             response=result.get("text", ""),
+            has_article_reference=has_ref,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -714,13 +732,28 @@ async def chat_with_routing(request: ChatRequest):
         # Determine if this is the first message (no conversation history)
         is_first_message = not request.conversation_history or len(request.conversation_history) == 0
         
-        result = agent.respond(contents=contents, api_key=api_key, is_first_message=is_first_message)
+        result = agent.respond(
+            contents=contents, 
+            api_key=api_key, 
+            is_first_message=is_first_message,
+            user_name=request.user_name,
+            parrot_name=request.parrot_name
+        )
+        
+        has_ref = result.get("has_article_reference", False)
+        print(f"[chat_and_route] Result has_article_reference={has_ref}, result keys: {list(result.keys())}")
+        
+        # Use custom parrot name if provided and agent is Polly
+        agent_display_name = agent.name
+        if target_agent_id == "polly" and request.parrot_name:
+            agent_display_name = f"{request.parrot_name} the Parrot"
         
         return ChatResponse(
-            agent=agent.name,
+            agent=agent_display_name,
             response=result.get("text", ""),
             routing_message=routing_message,
-            routed_from=routed_from
+            routed_from=routed_from,
+            has_article_reference=has_ref,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
