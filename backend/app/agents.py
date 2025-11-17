@@ -184,6 +184,74 @@ class FlynnAgent(BaseAgent):
     def __init__(self):
         super().__init__("Flynn the Falcon")
     
+    def _detect_sports_headlines_intent(self, text: str, api_key: Optional[str]) -> Dict[str, Any]:
+        """Use LLM to infer if the user is asking for sports headlines/news today."""
+        key = api_key or get_gemini_api_key()
+        if not key:
+            return {"wants_headlines": False}
+        prompt = f"""Analyze the user's message for intent to get SPORTS headlines or today's sports news.
+User message: "{text}"
+
+Respond ONLY as JSON with keys:
+{{
+  "wants_headlines": true|false  // true if asking for sports headlines/sports news/today's sports updates
+}}"""
+        try:
+            result = gemini_generate(contents=[{"role":"user","parts":[prompt]}], api_key=key)
+            import json, re
+            resp = result.get("text","")
+            match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
+            data = json.loads(match.group()) if match else {}
+            wants = bool(data.get("wants_headlines", False))
+            return {"wants_headlines": wants}
+        except Exception:
+            return {"wants_headlines": False}
+    
+    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False) -> Dict[str, Any]:
+        """If the user asks for sports headlines, fetch and provide top sports headlines as context."""
+        # Detect request intent from the latest user message
+        last_user_text = ""
+        for item in reversed(contents):
+            if isinstance(item, dict) and item.get("role") == "user":
+                parts = item.get("parts", [])
+                if parts:
+                    last_user_text = " ".join(str(p) for p in parts).strip()
+                    break
+        wants_headlines = False
+        if last_user_text:
+            intent = self._detect_sports_headlines_intent(last_user_text, api_key)
+            wants_headlines = bool(intent.get("wants_headlines", False))
+        if wants_headlines:
+            print("[FlynnAgent] Detected request for sports headlines; attempting fetch...")
+            try:
+                news_key = get_newsapi_key()
+                if news_key:
+                    headlines_data = fetch_top_headlines(news_key, country="us", category="sports", page_size=6)
+                    articles = headlines_data.get("articles", [])[:6]
+                    lines = []
+                    for i, a in enumerate(articles, start=1):
+                        title = (a.get("title") or "").strip()
+                        source = ((a.get("source") or {}).get("name") or "").strip()
+                        if title:
+                            if source:
+                                lines.append(f"{i}. {title} — {source}")
+                            else:
+                                lines.append(f"{i}. {title}")
+                    if lines:
+                        block = "Today's top sports headlines:\n" + "\n".join(lines)
+                        formatting_hint = (
+                            f"{block}\n\n"
+                            "Please present the items as a concise numbered list (one line per item), "
+                            "then end with a brief question about which game, team, or league to explore."
+                        )
+                        contents = [{"role": "user", "parts": [formatting_hint]}] + contents
+                        print(f"[FlynnAgent] Injected {len(lines)} sports headlines into response context.")
+                else:
+                    print("[FlynnAgent] NEWSAPI_KEY missing; cannot fetch sports headlines.")
+            except Exception:
+                print("[FlynnAgent] Exception while fetching sports headlines; continuing without injection.", flush=True)
+        return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message)
+    
     def get_system_prompt(self, is_first_message: bool = False) -> str:
         # return """You are Flynn the Falcon, a sports commentator and post-game recap specialist.
         # Setting: A sports arena filled with energy — dynamic, fast-paced, and exciting.
