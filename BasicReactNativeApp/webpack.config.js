@@ -2,8 +2,10 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const webpack = require('webpack');
 
+const isProduction = process.env.NODE_ENV === 'production' || process.argv.includes('--mode=production');
+
 module.exports = {
-  mode: 'development',
+  mode: isProduction ? 'production' : 'development',
   entry: './web/index.js',
   output: {
     path: path.resolve(__dirname, 'web/dist'),
@@ -23,7 +25,7 @@ module.exports = {
       filename: 'index.html',
     }),
     new webpack.DefinePlugin({
-      __DEV__: JSON.stringify(true),
+      __DEV__: JSON.stringify(!isProduction),
     }),
   ],
   module: {
@@ -99,6 +101,9 @@ module.exports = {
     historyApiFallback: true,
     open: true,
   },
-  devtool: 'source-map',
+  devtool: isProduction ? 'source-map' : 'eval-source-map',
+  optimization: {
+    minimize: isProduction,
+  },
 };
 

@@ -7,7 +7,7 @@
     "android": "react-native run-android",
     "ios": "react-native run-ios",
     "web": "webpack serve --config webpack.config.js",
-    "web:build": "webpack --config webpack.config.js --mode production",
+    "web:build": "NODE_ENV=production webpack --config webpack.config.js --mode production",
     "lint": "eslint .",
     "test": "jest"
   },
@@ -27,7 +27,7 @@
     "@react-native/metro-config": "0.76.7",
     "@tsconfig/react-native": "^3.0.0",
     "@types/react": "^18.0.24",
-    "@types/react-dom": "^19.2.3",
+    "@types/react-dom": "^18.2.0",
     "@types/react-test-renderer": "^18.0.0",
     "babel-jest": "^25.0.0",
     "babel-loader": "^10.0.0",
