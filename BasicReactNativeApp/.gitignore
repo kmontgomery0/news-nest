@@ -62,6 +62,9 @@ yarn-error.log
 # Temporary files created by Metro
 .metro-health-check*
 
+# Web build output
+web/dist/
+
 # Testing
 /coverage
 

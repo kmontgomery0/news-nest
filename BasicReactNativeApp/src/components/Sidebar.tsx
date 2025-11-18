@@ -7,6 +7,7 @@ import {
   Animated,
   StyleSheet,
   Dimensions,
+  Platform,
 } from 'react-native';
 import {
   background_cream_color,
@@ -15,8 +16,14 @@ import {
   text_dark_gray_color,
 } from '../styles/colors';
 
+// iPhone 16 width is 393px
+const IPHONE_16_WIDTH = 393;
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
-const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
+
+// Use static width for web (75% of iPhone 16), dynamic for native
+const SIDEBAR_WIDTH = Platform.OS === 'web' 
+  ? IPHONE_16_WIDTH * 0.75  // 75% of iPhone 16 width = 294.75px
+  : SCREEN_WIDTH * 0.75;   // 75% of actual screen width on native
 
 interface SidebarProps {
   isOpen: boolean;

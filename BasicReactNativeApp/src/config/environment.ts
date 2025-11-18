@@ -30,6 +30,9 @@ const getEnvironment = (): Environment => {
       apiBaseUrl = 'http://localhost:8000';
       // For physical iOS device, uncomment and set your IP:
       // apiBaseUrl = 'http://192.168.1.100:8000';
+    } else if (Platform.OS === 'web') {
+      // Web platform uses localhost
+      apiBaseUrl = 'http://localhost:8000';
     }
   } else {
     // Production - set your production API URL here

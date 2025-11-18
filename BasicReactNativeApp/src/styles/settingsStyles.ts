@@ -176,9 +176,13 @@ export const settingsStyles = StyleSheet.create({
   dateInputContainer: {
     flexDirection: 'row',
     gap: 8,
+    width: '100%',
+    maxWidth: '100%',
   },
   dateInput: {
     flex: 1,
+    minWidth: 0, // Allow shrinking below content size
+    maxWidth: '33%', // Each input takes max 1/3 of container
   },
   topicsGrid: {
     flexDirection: 'row',
@@ -326,9 +330,12 @@ export const settingsStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    width: '100%',
+    maxWidth: '100%',
   },
   parrotNameInput: {
     flex: 1,
+    minWidth: 0, // Allow shrinking below content size
     paddingVertical: 14,
     borderWidth: 1,
     borderColor: '#000000',
