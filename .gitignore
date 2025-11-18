@@ -5,3 +5,36 @@ __pycache__/
 *.pyd
 .Python
 backend/.venv/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# React Native / Metro
+$TMPDIR/metro-*
+ios/build/
+android/build/
+
+# Xcode
+*.xcuserdata/
+*.xcscmblueprint
+*.moved-aside
+DerivedData/
+*.xcworkspace
+*.xcodeproj/project.xcworkspace/
+ios/Podfile.lock # optional: you can commit Podfile.lock if you want locked dependencies
+
+# Local overrides
+ios/.xcode.env.local
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Logs
+*.log
