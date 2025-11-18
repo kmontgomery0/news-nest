@@ -3,7 +3,11 @@
   "buildCommand": "npm run web:build",
   "outputDirectory": "web/dist",
   "installCommand": "npm install --legacy-peer-deps",
+  "rootDirectory": "BasicReactNativeApp",
   "framework": null,
+  "git": {
+    "deploymentEnabled": true
+  },
   "rewrites": [
     {
       "source": "/(.*)",
