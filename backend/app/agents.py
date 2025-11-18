@@ -3,7 +3,17 @@
 from typing import List, Dict, Any, Optional
 from .gemini import gemini_generate
 from .config import get_gemini_api_key, get_newsapi_key
-from .newsapi_client import fetch_top_headlines
+from .news_helper import fetch_headlines_prompt
+
+# Shared formatting instructions for all agents when injecting headlines
+COMMON_HEADLINES_FORMATTING = (
+    "Please present the items as a concise numbered list (one line per item), "
+    "ALWAYS format news lists as concise numbered lists (one line per item) "
+    "ALWAYS put in parenthesis the source of the article AND its general lean (political, or otherwise) (e.g. \"1. Headline (source, liberal-leaning)\") "
+    "ALWAYS return exactly 5 headlines unless otherwise specified. "
+    "NEVER create or paraphrase headlines yourself — only use the fetched list. "
+    "If fewer than 5 headlines are available, fetch more until you have 5."
+)
 
 
 class BaseAgent:
@@ -92,27 +102,24 @@ Respond ONLY as JSON with keys:
             try:
                 news_key = get_newsapi_key()
                 if news_key:
-                    headlines_data = fetch_top_headlines(news_key, country="us", page_size=6)
-                    articles = headlines_data.get("articles", [])[:6]
-                    lines = []
-                    for i, a in enumerate(articles, start=1):
-                        title = (a.get("title") or "").strip()
-                        source = ((a.get("source") or {}).get("name") or "").strip()
-                        if title:
-                            if source:
-                                lines.append(f"{i}. {title} — {source}")
-                            else:
-                                lines.append(f"{i}. {title}")
-                    if lines:
-                        block = "Today's top headlines:\n" + "\n".join(lines)
-                        formatting_hint = (
-                            f"{block}\n\n"
-                            "Please present the items as a concise numbered list (one line per item), "
-                            "then end with a friendly question about which story to explore."
-                            "ALWAYS return exactly 5 headlines unless otherwise specified"
-                        )
-                        contents = [{"role": "user", "parts": [formatting_hint]}] + contents
-                        print(f"[PollyAgent] Injected {len(lines)} headlines into response context.")
+                    formatting_instructions = (
+                        COMMON_HEADLINES_FORMATTING + " "
+                        "then end with a friendly question about which story to explore."
+                    )
+                    result = fetch_headlines_prompt(
+                        country="us",
+                        category=None,
+                        q=None,
+                        page_size=6,
+                        header_text="Today's top headlines:",
+                        formatting_instructions=formatting_instructions,
+                        api_key=news_key,
+                        min_items=5,
+                        max_pages=3,
+                    )
+                    if result and result.get("prompt"):
+                        contents = [{"role": "user", "parts": [result["prompt"]]}] + contents
+                        print(f"[PollyAgent] Injected {result.get('count', 0)} headlines into response context.")
                 else:
                     print("[PollyAgent] NEWSAPI_KEY missing; cannot fetch headlines.")
             except Exception:
@@ -164,9 +171,6 @@ Respond ONLY as JSON with keys:
             RESPONSE STYLE (CRITICAL):
             • ALWAYS start brief — give a quick overview (2-3 sentences max)
             • Provide breadth first, depth later — mention key points without going deep
-            • ALWAYS format news lists as concise numbered lists (one line per item)
-            • ALWAYS put in parenthesis the source of the article AND its general lean (political, or otherwise) (e.g. "1. Headline (source, liberal-leaning)")
-            • ALWAYS return exactly 5 headlines unless otherwise specified
             • ALWAYS end with a question asking what the user wants to learn more about
             • Examples: "Would you like to learn more about [specific aspect]?" or "What would you like to explore further?"
             • Keep initial responses under 100 words — save details for follow-ups
@@ -237,26 +241,24 @@ Respond ONLY as JSON with keys:
             try:
                 news_key = get_newsapi_key()
                 if news_key:
-                    headlines_data = fetch_top_headlines(news_key, country="us", category="sports", page_size=6)
-                    articles = headlines_data.get("articles", [])[:6]
-                    lines = []
-                    for i, a in enumerate(articles, start=1):
-                        title = (a.get("title") or "").strip()
-                        source = ((a.get("source") or {}).get("name") or "").strip()
-                        if title:
-                            if source:
-                                lines.append(f"{i}. {title} — {source}")
-                            else:
-                                lines.append(f"{i}. {title}")
-                    if lines:
-                        block = "Today's top sports headlines:\n" + "\n".join(lines)
-                        formatting_hint = (
-                            f"{block}\n\n"
-                            "Please present the items as a concise numbered list (one line per item), "
-                            "then end with a brief question about which game, team, or league to explore."
-                        )
-                        contents = [{"role": "user", "parts": [formatting_hint]}] + contents
-                        print(f"[FlynnAgent] Injected {len(lines)} sports headlines into response context.")
+                    formatting_instructions = (
+                        COMMON_HEADLINES_FORMATTING + " "
+                        "then end with a brief question about which game, team, or league to explore."
+                    )
+                    result = fetch_headlines_prompt(
+                        country="us",
+                        category="sports",
+                        q=None,
+                        page_size=6,
+                        header_text="Today's top sports headlines:",
+                        formatting_instructions=formatting_instructions,
+                        api_key=news_key,
+                        min_items=5,
+                        max_pages=3,
+                    )
+                    if result and result.get("prompt"):
+                        contents = [{"role": "user", "parts": [result["prompt"]]}] + contents
+                        print(f"[FlynnAgent] Injected {result.get('count', 0)} sports headlines into response context.")
                 else:
                     print("[FlynnAgent] NEWSAPI_KEY missing; cannot fetch sports headlines.")
             except Exception:
@@ -306,7 +308,7 @@ Respond ONLY as JSON with keys:
             RESPONSE STYLE (CRITICAL):
             • ALWAYS start brief — give quick highlights first (2-3 sentences)
             • Mention key scores/outcomes, then ask what they want more detail on
-            • ALWAYS end with a question: "What would you like to know more about?" or "Would you like details on [specific aspect]?"
+            • WHEN APPROPRIATE end with a question: "What would you like to know more about?" or "Would you like details on [specific aspect]?"
             • Keep initial responses under 100 words
             • Provide depth only when the user asks for more
             • NEVER use greetings like "good morning", "hello", or "hi" unless this is the very first message in a new conversation
@@ -333,6 +335,71 @@ class PixelAgent(BaseAgent):
     
     def __init__(self):
         super().__init__("Pixel the Pigeon")
+    
+    def _detect_tech_headlines_intent(self, text: str, api_key: Optional[str]) -> Dict[str, Any]:
+        """Use LLM to infer if the user is asking for technology headlines/news today."""
+        key = api_key or get_gemini_api_key()
+        if not key:
+            return {"wants_headlines": False}
+        prompt = f"""Analyze the user's message for intent to get TECHNOLOGY headlines or today's tech news.
+User message: "{text}"
+
+Respond ONLY as JSON with keys:
+{{
+  "wants_headlines": true|false  // true if asking for technology headlines/tech news/today's tech updates
+}}"""
+        try:
+            result = gemini_generate(contents=[{"role":"user","parts":[prompt]}], api_key=key)
+            import json, re
+            resp = result.get("text","")
+            match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
+            data = json.loads(match.group()) if match else {}
+            wants = bool(data.get("wants_headlines", False))
+            return {"wants_headlines": wants}
+        except Exception:
+            return {"wants_headlines": False}
+    
+    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> Dict[str, Any]:
+        """If the user asks for tech headlines, fetch and provide top technology headlines as context."""
+        last_user_text = ""
+        for item in reversed(contents):
+            if isinstance(item, dict) and item.get("role") == "user":
+                parts = item.get("parts", [])
+                if parts:
+                    last_user_text = " ".join(str(p) for p in parts).strip()
+                    break
+        wants_headlines = False
+        if last_user_text:
+            intent = self._detect_tech_headlines_intent(last_user_text, api_key)
+            wants_headlines = bool(intent.get("wants_headlines", False))
+        if wants_headlines:
+            print("[PixelAgent] Detected request for technology headlines; attempting fetch...")
+            try:
+                news_key = get_newsapi_key()
+                if news_key:
+                    formatting_instructions = (
+                        COMMON_HEADLINES_FORMATTING + " "
+                        "then end with a brief question about which topic, device, or company to explore."
+                    )
+                    result = fetch_headlines_prompt(
+                        country="us",
+                        category="technology",
+                        q=None,
+                        page_size=6,
+                        header_text="Today's top technology headlines:",
+                        formatting_instructions=formatting_instructions,
+                        api_key=news_key,
+                        min_items=5,
+                        max_pages=3,
+                    )
+                    if result and result.get("prompt"):
+                        contents = [{"role": "user", "parts": [result["prompt"]]}] + contents
+                        print(f"[PixelAgent] Injected {result.get('count', 0)} technology headlines into response context.")
+                else:
+                    print("[PixelAgent] NEWSAPI_KEY missing; cannot fetch technology headlines.")
+            except Exception:
+                print("[PixelAgent] Exception while fetching technology headlines; continuing without injection.", flush=True)
+        return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
     
     def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
         # return """You are Pixel the Pigeon, a tech explainer and innovation digest specialist.
@@ -378,7 +445,10 @@ class PixelAgent(BaseAgent):
             RESPONSE STYLE (CRITICAL):
             • ALWAYS start brief — give a simple overview first (2-3 sentences)
             • Explain the concept at a high level, then ask what aspect interests them
-            • ALWAYS end with a question: "What part of this would you like me to explain more?" or "Would you like to know more about [specific aspect]?"
+            • ALWAYS format news lists as concise numbered lists (one line per item)
+            • ALWAYS put in parenthesis the source of the article AND its general lean (political, or otherwise) (e.g. "1. Headline (source, liberal-leaning)")
+            • ALWAYS return exactly 5 headlines unless otherwise specified
+            • WHEN APPROPRIATE end with a question: "What part of this would you like me to explain more?" or "Would you like to know more about [specific aspect]?"
             • Keep initial responses under 100 words
             • Dive deeper only when the user asks
             • NEVER use greetings like "good morning", "hello", or "hi" unless this is the very first message in a new conversation
@@ -403,6 +473,71 @@ class CatoAgent(BaseAgent):
     
     def __init__(self):
         super().__init__("Cato the Crane")
+    
+    def _detect_politics_headlines_intent(self, text: str, api_key: Optional[str]) -> Dict[str, Any]:
+        """Use LLM to infer if the user is asking for politics/civics headlines/news today."""
+        key = api_key or get_gemini_api_key()
+        if not key:
+            return {"wants_headlines": False}
+        prompt = f"""Analyze the user's message for intent to get POLITICS or CIVICS headlines or today's public-affairs news.
+User message: "{text}"
+
+Respond ONLY as JSON with keys:
+{{
+  "wants_headlines": true|false  // true if asking for politics/civics headlines/news/today's updates
+}}"""
+        try:
+            result = gemini_generate(contents=[{"role":"user","parts":[prompt]}], api_key=key)
+            import json, re
+            resp = result.get("text","")
+            match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
+            data = json.loads(match.group()) if match else {}
+            wants = bool(data.get("wants_headlines", False))
+            return {"wants_headlines": wants}
+        except Exception:
+            return {"wants_headlines": False}
+    
+    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> Dict[str, Any]:
+        """If the user asks for politics headlines, fetch and provide top public-affairs headlines as context."""
+        last_user_text = ""
+        for item in reversed(contents):
+            if isinstance(item, dict) and item.get("role") == "user":
+                parts = item.get("parts", [])
+                if parts:
+                    last_user_text = " ".join(str(p) for p in parts).strip()
+                    break
+        wants_headlines = False
+        if last_user_text:
+            intent = self._detect_politics_headlines_intent(last_user_text, api_key)
+            wants_headlines = bool(intent.get("wants_headlines", False))
+        if wants_headlines:
+            print("[CatoAgent] Detected request for politics headlines; attempting fetch...")
+            try:
+                news_key = get_newsapi_key()
+                if news_key:
+                    formatting_instructions = (
+                        COMMON_HEADLINES_FORMATTING + " "
+                        "then end with a brief question about which issue, policy, or election to explore."
+                    )
+                    result = fetch_headlines_prompt(
+                        country="us",
+                        category=None,
+                        q="politics OR election OR policy OR government",
+                        page_size=6,
+                        header_text="Today's top politics headlines:",
+                        formatting_instructions=formatting_instructions,
+                        api_key=news_key,
+                        min_items=5,
+                        max_pages=3,
+                    )
+                    if result and result.get("prompt"):
+                        contents = [{"role": "user", "parts": [result["prompt"]]}] + contents
+                        print(f"[CatoAgent] Injected {result.get('count', 0)} politics headlines into response context.")
+                else:
+                    print("[CatoAgent] NEWSAPI_KEY missing; cannot fetch politics headlines.")
+            except Exception:
+                print("[CatoAgent] Exception while fetching politics headlines; continuing without injection.", flush=True)
+        return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
     
     def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
         # return """You are Cato the Crane, a civic commentator and editorial specialist.
@@ -447,7 +582,10 @@ class CatoAgent(BaseAgent):
             RESPONSE STYLE (CRITICAL):
             • ALWAYS start brief — give a neutral overview first (2-3 sentences)
             • Explain the basics, then ask what they want to understand better
-            • ALWAYS end with a question: "What would you like to learn more about?" or "Which aspect interests you most?"
+            • ALWAYS format news lists as concise numbered lists (one line per item)
+            • ALWAYS put in parenthesis the source of the article AND its general lean (political, or otherwise) (e.g. "1. Headline (source, liberal-leaning)")
+            • ALWAYS return exactly 5 headlines unless otherwise specified
+            • WHEN APPROPRIATE end with a question: "What would you like to learn more about?" or "Which aspect interests you most?"
             • Keep initial responses under 100 words
             • Provide deeper context only when requested
             • NEVER use greetings like "good morning", "hello", or "hi" unless this is the very first message in a new conversation

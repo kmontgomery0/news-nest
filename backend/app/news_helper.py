@@ -1,7 +1,7 @@
 """Helper functions for fetching and summarizing news for agents."""
 
 from typing import Optional, Dict, Any, List
-from .newsapi_client import fetch_news
+from .newsapi_client import fetch_news, fetch_top_headlines
 from .config import get_newsapi_key, get_gemini_api_key
 from .gemini import gemini_generate
 
@@ -54,6 +54,95 @@ def fetch_relevant_news(query: str, days_back: int = 3, max_articles: int = 5) -
         print(f"[fetch_relevant_news] Error fetching news: {e}")
         import traceback
         traceback.print_exc()
+        return None
+
+
+def fetch_headlines_prompt(
+    *,
+    country: Optional[str] = "us",
+    category: Optional[str] = None,
+    q: Optional[str] = None,
+    page_size: int = 6,
+    header_text: str,
+    formatting_instructions: str,
+    api_key: Optional[str] = None,
+    min_items: Optional[int] = None,
+    max_pages: int = 3
+) -> Optional[Dict[str, Any]]:
+    """
+    Fetch top headlines and return a pre-formatted prompt block and count.
+    
+    Args:
+        country: Country code for headlines (default: "us")
+        category: Optional category (e.g., "sports")
+        page_size: How many articles to fetch per page (default: 6)
+        header_text: The header line above the list (e.g., "Today's top headlines:")
+        formatting_instructions: Trailing instructions appended after the list
+        api_key: Optional NewsAPI key override
+        min_items: If provided, ensure at least this many items by fetching additional pages
+        max_pages: Max number of pages to fetch when attempting to reach min_items
+        q: Optional query to filter top headlines (e.g., "politics OR election")
+    
+    Returns:
+        dict with {"prompt": str, "count": int} or None if unavailable
+    """
+    key = api_key or get_newsapi_key()
+    if not key:
+        return None
+    try:
+        collected: List[Dict[str, Any]] = []
+        seen_keys = set()
+        page = 1
+        total_needed = min_items if min_items is not None else page_size
+
+        while page <= max_pages and (len(collected) < total_needed if min_items is not None else page == 1):
+            headlines_data = fetch_top_headlines(
+                key,
+                country=country,
+                category=category,
+                q=q,
+                page_size=page_size,
+                page=page,
+            )
+            articles = headlines_data.get("articles", []) or []
+            if not articles:
+                break
+            for a in articles:
+                title = (a.get("title") or "").strip()
+                source = ((a.get("source") or {}).get("name") or "").strip()
+                dedup_key = f"{title}::{source}"
+                if title and dedup_key not in seen_keys:
+                    collected.append(a)
+                    seen_keys.add(dedup_key)
+            # If not enforcing min_items, only first page needed (original behavior)
+            if min_items is None:
+                break
+            page += 1
+
+        if not collected:
+            return None
+
+        # Determine how many to include in the prompt
+        if min_items is not None:
+            selected = collected[:min_items]
+        else:
+            selected = collected[:page_size]
+
+        lines: List[str] = []
+        for idx, a in enumerate(selected, start=1):
+            title = (a.get("title") or "").strip()
+            source = ((a.get("source") or {}).get("name") or "").strip()
+            if title:
+                if source:
+                    lines.append(f"{idx}. {title} — {source}")
+                else:
+                    lines.append(f"{idx}. {title}")
+        if not lines:
+            return None
+        block = f"{header_text}\n" + "\n".join(lines)
+        prompt = f"{block}\n\n{formatting_instructions}"
+        return {"prompt": prompt, "count": len(lines)}
+    except Exception:
         return None
 
 
