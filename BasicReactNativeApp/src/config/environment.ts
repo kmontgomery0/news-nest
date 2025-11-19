@@ -36,7 +36,8 @@ const getEnvironment = (): Environment => {
     }
   } else {
     // Production - set your production API URL here
-    apiBaseUrl = 'https://news-nest-7hcx.onrender.com';
+    // apiBaseUrl = 'https://news-nest-7hcx.onrender.com';
+    apiBaseUrl = 'news-nest-production.up.railway.app';
   }
 
   return {
