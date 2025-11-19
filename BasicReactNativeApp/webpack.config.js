@@ -26,6 +26,7 @@ module.exports = {
     }),
     new webpack.DefinePlugin({
       __DEV__: JSON.stringify(!isProduction),
+      'process.env.REACT_APP_API_URL': JSON.stringify(process.env.REACT_APP_API_URL),
     }),
   ],
   module: {
