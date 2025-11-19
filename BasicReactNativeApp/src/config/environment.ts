@@ -16,29 +16,39 @@ export interface Environment {
  */
 const getEnvironment = (): Environment => {
   const isDev = __DEV__;
+  const PRODUCTION_API_URL = 'https://news-nest-production.up.railway.app';
 
-  // For physical device testing, replace 'localhost' with your machine's IP
-  // Example: 'http://192.168.1.100:8000'
-  let apiBaseUrl = 'http://localhost:8000';
+  let apiBaseUrl = '';
 
-  if (isDev) {
-    if (Platform.OS === 'android') {
-      // Android emulator uses 10.0.2.2 to access host machine
-      apiBaseUrl = 'http://10.0.2.2:8000';
-    } else if (Platform.OS === 'ios') {
-      // iOS simulator can use localhost
+  if (Platform.OS === 'web') {
+    // Web platform
+    if (isDev) {
+      // Development: use localhost
       apiBaseUrl = 'http://localhost:8000';
-      // For physical iOS device, uncomment and set your IP:
-      // apiBaseUrl = 'http://192.168.1.100:8000';
-    } else if (Platform.OS === 'web') {
-      // Web platform uses localhost
-      apiBaseUrl = 'http://localhost:8000';
+    } else {
+      // Production: use environment variable (for Vercel) or fallback to Railway
+      apiBaseUrl =
+        process.env.NEXT_PUBLIC_API_URL ||
+        process.env.REACT_APP_API_URL ||
+        PRODUCTION_API_URL;
     }
   } else {
-    // Production - set your production API URL here
-    // apiBaseUrl = 'https://news-nest-7hcx.onrender.com';
-    // apiBaseUrl = 'news-nest-production.up.railway.app';
-    apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://news-nest-production.up.railway.app';
+    // iOS or Android
+    if (isDev) {
+      // Development: use localhost or device-specific IP
+      if (Platform.OS === 'android') {
+        // Android emulator uses 10.0.2.2 to access host machine
+        apiBaseUrl = 'http://10.0.2.2:8000';
+      } else {
+        // iOS simulator can use localhost
+        apiBaseUrl = 'http://localhost:8000';
+        // For physical iOS device, uncomment and set your IP:
+        // apiBaseUrl = 'http://192.168.1.100:8000';
+      }
+    } else {
+      // Production: use hardcoded Railway URL
+      apiBaseUrl = PRODUCTION_API_URL;
+    }
   }
 
   return {
