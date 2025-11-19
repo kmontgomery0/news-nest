@@ -36,7 +36,7 @@ const getEnvironment = (): Environment => {
     }
   } else {
     // Production - set your production API URL here
-    apiBaseUrl = 'https://your-production-api.com';
+    apiBaseUrl = 'https://news-nest-7hcx.onrender.com';
   }
 
   return {
