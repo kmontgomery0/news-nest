@@ -15,7 +15,7 @@ interface ChatHistoryScreenProps {
   email?: string;
   onNavigateToHome?: () => void;
   onNavigateToSettings?: () => void;
-  onNavigateToChat?: () => void;
+  onNavigateToChat?: (sessionId?: string) => void;
 }
 
 interface ChatHistoryEntry {
@@ -116,7 +116,9 @@ export const ChatHistoryScreen: React.FC<ChatHistoryScreenProps> = ({
             <TouchableOpacity
               key={entry.id}
               style={chatHistoryStyles.card}
-              onPress={handleCardPress}
+              onPress={() => {
+                onNavigateToChat?.(entry.id);
+              }}
               activeOpacity={0.7}>
               <View style={chatHistoryStyles.cardContent}>
                 <Text style={chatHistoryStyles.dateText}>

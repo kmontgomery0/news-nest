@@ -12,6 +12,7 @@ from .agents import POLLY, FLYNN, PIXEL, CATO
 from .news_helper import get_news_context
 from .auth import router as auth_router
 from .mongo import get_users_collection, get_mongo_client, get_db, get_chat_sessions_collection
+from bson import ObjectId
 
 
 app = FastAPI(title="News Nest API", version="0.1.0")
@@ -611,6 +612,32 @@ def get_chat_history(email: str):
             "created_at": doc.get("created_at").isoformat() if doc.get("created_at") else None,
         })
     return {"sessions": sessions}
+
+
+@app.get("/chats/session")
+def get_chat_session(id: str, email: str):
+    """Fetch a single chat session by id for a given user, including messages."""
+    normalized = (email or "").strip().lower()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Email is required.")
+    try:
+        oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid chat id.")
+    coll = get_chat_sessions_collection()
+    doc = coll.find_one({"_id": oid, "email": normalized})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Chat not found.")
+    # Return messages as saved, plus basic metadata
+    messages = doc.get("messages") or []
+    return {
+        "id": str(doc.get("_id")),
+        "title": doc.get("title") or "Conversation",
+        "birds": doc.get("birds") or [],
+        "messages": messages,
+        "updated_at": doc.get("updated_at").isoformat() if doc.get("updated_at") else None,
+        "created_at": doc.get("created_at").isoformat() if doc.get("created_at") else None,
+    }
 @app.post("/agents/route-only")
 async def route_only(request: ChatRequest):
     """Smart routing endpoint using Gemini API to detect topic changes and route appropriately."""

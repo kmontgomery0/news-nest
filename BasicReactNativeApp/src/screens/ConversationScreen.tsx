@@ -33,6 +33,7 @@ interface ConversationScreenProps {
   userName?: string;
   parrotName?: string;
   email?: string;
+  sessionId?: string;
   onBack?: () => void;
   onNavigateToHome?: () => void;
   onNavigateToSettings?: () => void;
@@ -45,6 +46,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   userName = 'Nicole',
   parrotName = 'Polly',
   email,
+  sessionId,
   onBack,
   onNavigateToHome,
   onNavigateToSettings,
@@ -57,14 +59,16 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   
   const defaultAgentName = selectedBird?.agentName || selectedBird?.name || `${parrotName} the Parrot`;
 
-  const [messages, setMessages] = useState<Message[]>([
-    initialMessage || {
-      id: '1',
-      type: 'agent',
-      text: defaultWelcomeMessage,
-      agentName: defaultAgentName,
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>(
+    initialMessage
+      ? [initialMessage]
+      : [{
+          id: '1',
+          type: 'agent',
+          text: defaultWelcomeMessage,
+          agentName: defaultAgentName,
+        }]
+  );
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState<{
@@ -115,6 +119,52 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     return BIRD_IMAGE_SHIFTS[name] || {left: 5, top: 2};
   };
 
+
+  // If a sessionId is provided, load the saved chat messages
+  useEffect(() => {
+    const loadSession = async () => {
+      try {
+        if (!email || !sessionId) return;
+        const { getChatSession } = await import('../services/api');
+        const data = await getChatSession(email, sessionId);
+        const history = Array.isArray(data?.messages) ? data.messages : [];
+        const loaded: Message[] = [];
+        let lastAgentNameLocal: string | undefined = undefined;
+        history.forEach((h, idx) => {
+          const text = Array.isArray(h.parts) ? h.parts.map(p => String(p)).join(' ') : '';
+          if (h.role === 'user') {
+            loaded.push({
+              id: `user-${idx}-${Date.now()}`,
+              type: 'user',
+              text,
+            });
+          } else {
+            // extract agent name from metadata [Agent: Name]
+            const match = text.match(/\[Agent:\s*([^\]]+)\]\s*$/i);
+            const agentName = match ? match[1].trim() : undefined;
+            const cleaned = text.replace(/\s*\[Agent:\s*[^\]]+\]\s*$/i, '').trim();
+            if (agentName) lastAgentNameLocal = agentName;
+            loaded.push({
+              id: `agent-${idx}-${Date.now()}`,
+              type: 'agent',
+              text: cleaned,
+              agentName: agentName || lastAgentNameLocal || defaultAgentName,
+            });
+          }
+        });
+        if (loaded.length > 0) {
+          setMessages(loaded);
+          // set current agent if last message is agent
+          const last = [...loaded].reverse().find(m => m.type === 'agent');
+          if (last?.agentName) setCurrentAgent(last.agentName);
+        }
+      } catch (e) {
+        console.warn('Failed to load chat session', e);
+      }
+    };
+    loadSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, sessionId]);
 
   // Input slide-in animation on mount
   useEffect(() => {

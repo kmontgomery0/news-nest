@@ -227,3 +227,23 @@ export const getChatHistory = async (email: string) => {
   }
   return data as { sessions: { id: string; title: string; birds: string[]; updated_at?: string; created_at?: string }[] };
 };
+
+/**
+ * Fetch a single chat session with messages.
+ */
+export const getChatSession = async (email: string, id: string) => {
+  const url = `${API_BASE_URL}${API_ENDPOINTS.CHATS_SESSION}?email=${encodeURIComponent(email)}&id=${encodeURIComponent(id)}`;
+  const response = await fetch(url, { method: 'GET' });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.detail || 'Failed to fetch chat session');
+  }
+  return data as {
+    id: string;
+    title: string;
+    birds: string[];
+    messages: { role: 'user' | 'model'; parts: string[] }[];
+    updated_at?: string;
+    created_at?: string;
+  };
+};

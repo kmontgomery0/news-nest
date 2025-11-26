@@ -46,7 +46,10 @@ function App(): JSX.Element {
     setSelectedBird(null);
   };
 
-  const handleNavigateToChat = () => {
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null);
+
+  const handleNavigateToChat = (sessionId?: string) => {
+    setChatSessionId(sessionId || null);
     const polly = BIRDS.find(b => b.id === 'polly')!;
     // Create dynamic Polly with custom name
     const dynamicPolly = {
@@ -241,6 +244,7 @@ function App(): JSX.Element {
             userName={userName}
             parrotName={parrotName}
             email={onboardingEmail}
+            sessionId={chatSessionId || undefined}
             onBack={handleBackToHome}
             onNavigateToHome={handleBackToHome}
             onNavigateToSettings={handleNavigateToSettings}

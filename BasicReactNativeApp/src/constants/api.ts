@@ -9,5 +9,6 @@ export const API_ENDPOINTS = {
   AGENTS_LIST: '/agents/list',
   CHATS_SAVE: '/chats/save',
   CHATS_HISTORY: '/chats/history',
+  CHATS_SESSION: '/chats/session',
 } as const;
 
