@@ -10,10 +10,22 @@ import {ConversationScreen} from './src/screens/ConversationScreen';
 import {HomeScreen} from './src/screens/HomeScreen';
 import {SettingsScreen} from './src/screens/SettingsScreen';
 import {ChatHistoryScreen} from './src/screens/ChatHistoryScreen';
+import {EnterScreen} from './src/screens/EnterScreen';
+import {LoginScreen} from './src/screens/LoginScreen';
+import {OnboardingScreen} from './src/screens/OnboardingScreen';
+import {OnboardingScreen2} from './src/screens/OnboardingScreen2';
+import {registerUser, saveUserPreferences, getUserProfile, getUserPreferences} from './src/services/api';
 import {Bird, BIRDS} from './src/constants/birds';
 import {background_cream_color} from './src/styles/colors';
 
 function App(): JSX.Element {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showEnter, setShowEnter] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1);
+  const [onboardingName, setOnboardingName] = useState('');
+  const [onboardingEmail, setOnboardingEmail] = useState('');
+  const [onboardingPassword, setOnboardingPassword] = useState('');
   const [selectedBird, setSelectedBird] = useState<Bird | null>(null);
   const [showConversation, setShowConversation] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -63,6 +75,7 @@ function App(): JSX.Element {
     setShowConversation(false);
     setShowChatHistory(false);
     setSelectedBird(null);
+    setShowEnter(false);
   };
 
   const handleNavigateToChatHistory = () => {
@@ -77,12 +90,103 @@ function App(): JSX.Element {
       <StatusBar barStyle="dark-content" />
         <View style={styles.content}>
         <Header />
-        {showSettings ? (
+        {showOnboarding ? (
+          onboardingStep === 1 ? (
+            <OnboardingScreen
+              onNext={() => {
+                setOnboardingStep(2);
+              }}
+              onSubmitFirst={(name, email, password) => {
+                setOnboardingName(name);
+                setOnboardingEmail(email);
+                setOnboardingPassword(password);
+              }}
+            />
+          ) : (
+            <OnboardingScreen2
+              onSubmitPreferences={async (prefs) => {
+                // Save preferences after successful registration; we need email from onboardingEmail
+                try {
+                  if (!onboardingEmail) return;
+                  await saveUserPreferences({
+                    email: onboardingEmail,
+                    parrot_name: prefs.parrot_name,
+                    times: prefs.times,
+                    frequency: prefs.frequency,
+                    push_notifications: prefs.push_notifications,
+                    email_summaries: prefs.email_summaries,
+                    topics: prefs.topics,
+                  });
+                } catch (e) {
+                  console.warn('Saving preferences failed', e);
+                }
+              }}
+              onNext={async () => {
+                try {
+                  await registerUser(onboardingName, onboardingEmail, onboardingPassword);
+                  setIsAuthenticated(true);
+                  setShowOnboarding(false);
+                  setShowEnter(false);
+                  setUserName(onboardingName);
+                } catch (e: any) {
+                  console.warn('Registration failed', e?.message || e);
+                }
+              }}
+            />
+          )
+        ) : showEnter ? (
+          <EnterScreen onGetStarted={() => setShowEnter(false)} />
+        ) : !isAuthenticated ? (
+          <LoginScreen
+            onSignedIn={async (email) => {
+              try {
+                // Persist email in app state
+                setOnboardingEmail(email);
+                // Fetch profile and prefs
+                const [profile, prefs] = await Promise.all([
+                  getUserProfile(email),
+                  getUserPreferences(email),
+                ]);
+                // Update UI state
+                if (profile?.name) setUserName(profile.name);
+                if (prefs?.parrot_name) setParrotName(prefs.parrot_name);
+                if (Array.isArray(prefs?.topics)) {
+                  const mapTopicToBird: Record<string, string> = {
+                    'sports': 'flynn',
+                    'technology': 'pixel',
+                    'politics': 'cato',
+                    'entertainment': 'pizzazz',
+                    'business': 'edwin',
+                    'crime-legal': 'credo',
+                    'science-environment': 'gaia',
+                    'feel-good': 'happy',
+                    'history-trends': 'omni',
+                  };
+                  const birds = prefs.topics
+                    .map((t: string) => mapTopicToBird[t])
+                    .filter((id: string | undefined): id is string => !!id);
+                  if (birds.length) setSelectedBirdIds(birds);
+                }
+                setIsAuthenticated(true);
+                setShowEnter(true);
+              } catch (e) {
+                console.warn('Failed to load user data', e);
+                setIsAuthenticated(true);
+                setShowEnter(true);
+              }
+            }}
+            onJoinFlock={() => {
+              setShowOnboarding(true);
+              setOnboardingStep(1);
+            }}
+          />
+        ) : showSettings ? (
           <SettingsScreen
             userName={userName}
             parrotName={parrotName}
             selectedBirdIds={selectedBirdIds}
             initialTab={settingsInitialTab}
+            email={onboardingEmail}
             onNavigateToHome={handleNavigateToHome}
             onNavigateToHistory={handleNavigateToChatHistory}
             onSaveProfile={(name, parrot) => {

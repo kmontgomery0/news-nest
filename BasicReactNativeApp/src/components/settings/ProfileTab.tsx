@@ -5,13 +5,13 @@ import {settingsStyles} from '../../styles/settingsStyles';
 interface ProfileTabProps {
   name: string;
   email: string;
-  region: string;
+  password: string;
   day: string;
   month: string;
   year: string;
   onNameChange: (text: string) => void;
   onEmailChange: (text: string) => void;
-  onRegionChange: (text: string) => void;
+  onPasswordChange: (text: string) => void;
   onDayChange: (text: string) => void;
   onMonthChange: (text: string) => void;
   onYearChange: (text: string) => void;
@@ -21,13 +21,13 @@ interface ProfileTabProps {
 export const ProfileTab: React.FC<ProfileTabProps> = ({
   name,
   email,
-  region,
+  password,
   day,
   month,
   year,
   onNameChange,
   onEmailChange,
-  onRegionChange,
+  onPasswordChange,
   onDayChange,
   onMonthChange,
   onYearChange,
@@ -74,22 +74,25 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
             value={email}
             onChangeText={onEmailChange}
             placeholder="Email"
-            onFocus={() => handleInputFocus('email')}
+            editable={false}
+            selectTextOnFocus={false}
+            onFocus={() => {}}
             onBlur={() => setFocusedInput(null)}
           />
         </View>
 
         <View style={settingsStyles.inputGroup}>
-          <Text style={settingsStyles.label}>Region</Text>
+          <Text style={settingsStyles.label}>Password</Text>
           <TextInput
             style={[
               settingsStyles.input,
-              !editedInputs.has('region') && settingsStyles.inputInactive,
+              !editedInputs.has('password') && settingsStyles.inputInactive,
             ]}
-            value={region}
-            onChangeText={onRegionChange}
-            placeholder="Region"
-            onFocus={() => handleInputFocus('region')}
+            value={password}
+            onChangeText={onPasswordChange}
+            placeholder="New password"
+            secureTextEntry
+            onFocus={() => handleInputFocus('password')}
             onBlur={() => setFocusedInput(null)}
           />
         </View>

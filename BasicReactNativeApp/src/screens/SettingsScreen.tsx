@@ -17,6 +17,7 @@ interface SettingsScreenProps {
   parrotName?: string;
   selectedBirdIds?: string[];
   initialTab?: 'profile' | 'topics' | 'notifications';
+  email?: string;
   onNavigateToHome?: () => void;
   onNavigateToHistory?: () => void;
   onSaveProfile?: (name: string, parrotName: string) => void;
@@ -28,6 +29,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   parrotName = 'Polly',
   selectedBirdIds: propSelectedBirdIds = ['flynn', 'pixel', 'cato'],
   initialTab = 'profile',
+  email: propEmail = '',
   onNavigateToHome,
   onNavigateToHistory,
   onSaveProfile,
@@ -42,8 +44,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   }, [initialTab]);
   
   const [name, setName] = useState(userName);
-  const [email, setEmail] = useState('*****@gmail.com');
-  const [region, setRegion] = useState('');
+  const [email, setEmail] = useState(propEmail);
+  const [password, setPassword] = useState('');
   const [day, setDay] = useState('');
   const [month, setMonth] = useState('');
   const [year, setYear] = useState('');
@@ -55,9 +57,18 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     setParrotNameState(parrotName);
   }, [userName, parrotName]);
   
-  const handleSaveProfile = () => {
-    if (onSaveProfile) {
-      onSaveProfile(name, parrotNameState);
+  const handleSaveProfile = async () => {
+    try {
+      if (onSaveProfile) {
+        onSaveProfile(name, parrotNameState);
+      }
+      // Persist to backend profile endpoint
+      const { saveUserProfile } = await import('../services/api');
+      await saveUserProfile(email, name, password || undefined);
+      // Clear password field after save
+      setPassword('');
+    } catch (e) {
+      console.warn('Failed to save profile', e);
     }
   };
 
@@ -228,13 +239,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           <ProfileTab
             name={name}
             email={email}
-            region={region}
+            password={password}
             day={day}
             month={month}
             year={year}
             onNameChange={setName}
             onEmailChange={setEmail}
-            onRegionChange={setRegion}
+            onPasswordChange={setPassword}
             onDayChange={setDay}
             onMonthChange={setMonth}
             onYearChange={setYear}

@@ -64,3 +64,16 @@ def get_env_debug() -> Dict[str, Any]:
     }
 
 
+def get_mongodb_srv() -> str:
+    """Fetch MongoDB connection string from env: supports MONGODB_URL and MONGODB_SRV."""
+    _ensure_env_loaded()
+    return _read_key("MONGODB_URL", "MONGODB_SRV", "MONGODB_URI")
+
+
+def get_mongodb_db_name(default: str = "news_nest") -> str:
+    """Fetch MongoDB database name, defaulting to 'news_nest' if not set."""
+    _ensure_env_loaded()
+    name = _read_key("DB_NAME", "MONGODB_DB", "MONGODB_DATABASE")
+    return name or default
+
+

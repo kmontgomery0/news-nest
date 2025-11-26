@@ -9,6 +9,8 @@ from .config import get_newsapi_key, get_gemini_api_key, get_env_debug
 from .newsapi_client import fetch_news
 from .agents import POLLY, FLYNN, PIXEL, CATO
 from .news_helper import get_news_context
+from .auth import router as auth_router
+from .mongo import get_users_collection, get_mongo_client, get_db
 
 
 app = FastAPI(title="News Nest API", version="0.1.0")
@@ -22,6 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router, prefix="/auth", tags=["auth"])
 
 @app.get("/test-news")
 def test_news_fetch(q: str = "sports"):
@@ -70,6 +73,24 @@ def debug_env():
     """Safe environment diagnostics (no secrets)."""
     return get_env_debug()
 
+@app.get("/debug/db")
+def debug_db():
+    """Minimal DB connectivity check and users count."""
+    try:
+        client = get_mongo_client()
+        db = get_db()
+        # A very light ping and count
+        client.admin.command("ping")
+        users = get_users_collection()
+        count = users.count_documents({})
+        return {
+            "connected": True,
+            "db_name": db.name,
+            "users_count": count,
+            "indexes": users.index_information(),
+        }
+    except Exception as exc:
+        return {"connected": False, "error": str(exc)}
 
 @app.get("/news")
 def get_news(
