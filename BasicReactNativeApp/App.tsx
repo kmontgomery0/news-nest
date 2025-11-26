@@ -225,6 +225,7 @@ function App(): JSX.Element {
         ) : showChatHistory ? (
           <ChatHistoryScreen
             userName={userName}
+            email={onboardingEmail}
             onNavigateToHome={handleNavigateToHome}
             onNavigateToSettings={handleNavigateToSettings}
             onNavigateToChat={handleNavigateToChat}
@@ -239,6 +240,7 @@ function App(): JSX.Element {
             }}
             userName={userName}
             parrotName={parrotName}
+            email={onboardingEmail}
             onBack={handleBackToHome}
             onNavigateToHome={handleBackToHome}
             onNavigateToSettings={handleNavigateToSettings}

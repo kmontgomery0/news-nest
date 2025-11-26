@@ -1,4 +1,4 @@
-import React, {useState, useMemo} from 'react';
+import React, {useState, useMemo, useEffect} from 'react';
 import {
   View,
   Text,
@@ -12,80 +12,55 @@ import {chatHistoryStyles} from '../styles/chatHistoryStyles';
 
 interface ChatHistoryScreenProps {
   userName?: string;
+  email?: string;
   onNavigateToHome?: () => void;
   onNavigateToSettings?: () => void;
   onNavigateToChat?: () => void;
 }
 
 interface ChatHistoryEntry {
-  date: Date;
-  birdIds: string[];
+  id: string;
+  title: string;
+  birds: string[];
+  updated_at?: string;
+  created_at?: string;
 }
+import {getChatHistory} from '../services/api';
 
 export const ChatHistoryScreen: React.FC<ChatHistoryScreenProps> = ({
   userName = 'Nicole',
+  email = '',
   onNavigateToHome,
   onNavigateToSettings,
   onNavigateToChat,
 }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [chatHistory, setChatHistory] = useState<ChatHistoryEntry[]>([]);
 
-  // Generate dummy data: 5 days from current date, 3-5 random birds per day
-  // TODO: Replace with actual chat history data
-  const chatHistory: ChatHistoryEntry[] = useMemo(() => {
-    const entries: ChatHistoryEntry[] = [];
-    const today = new Date();
-    
-    for (let i = 0; i < 5; i++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      
-      // Random number of birds between 3 and 5
-      const numBirds = Math.floor(Math.random() * 3) + 3;
-      
-      // Get random bird IDs (excluding polly, or including it randomly)
-      const availableBirds = BIRDS.filter(b => b.id !== 'polly');
-      const selectedBirds: string[] = [];
-      
-      // Randomly decide if Polly should be included (30% chance)
-      if (Math.random() < 0.3) {
-        selectedBirds.push('polly');
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!email) return;
+      try {
+        const data = await getChatHistory(email);
+        const sessions = (data.sessions || []).map(s => ({
+          id: s.id,
+          title: s.title,
+          birds: Array.isArray(s.birds) ? s.birds : [],
+          updated_at: s.updated_at,
+          created_at: s.created_at,
+        })) as ChatHistoryEntry[];
+        setChatHistory(sessions);
+      } catch (e) {
+        console.warn('Failed to load chat history', e);
       }
-      
-      // Shuffle and pick random birds
-      const shuffled = [...availableBirds].sort(() => Math.random() - 0.5);
-      const remaining = numBirds - selectedBirds.length;
-      
-      for (let j = 0; j < remaining && j < shuffled.length; j++) {
-        selectedBirds.push(shuffled[j].id);
-      }
-      
-      entries.push({
-        date,
-        birdIds: selectedBirds,
-      });
-    }
-    
-    return entries;
-  }, []);
+    };
+    fetchHistory();
+  }, [email]);
 
-  const formatDate = (date: Date): string => {
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    
-    if (date.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return 'Yesterday';
-    } else {
-      const options: Intl.DateTimeFormatOptions = {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-      };
-      return date.toLocaleDateString('en-US', options);
-    }
+  const formatDate = (iso?: string): string => {
+    if (!iso) return '';
+    const date = new Date(iso);
+    return date.toLocaleString();
   };
 
   const handleNavigate = (screen: 'home' | 'chat' | 'history' | 'settings') => {
@@ -137,18 +112,18 @@ export const ChatHistoryScreen: React.FC<ChatHistoryScreenProps> = ({
         style={chatHistoryStyles.scrollView}
         contentContainerStyle={chatHistoryStyles.scrollContent}>
         {chatHistory.length > 0 ? (
-          chatHistory.map((entry, index) => (
+          chatHistory.map((entry) => (
             <TouchableOpacity
-              key={index}
+              key={entry.id}
               style={chatHistoryStyles.card}
               onPress={handleCardPress}
               activeOpacity={0.7}>
               <View style={chatHistoryStyles.cardContent}>
                 <Text style={chatHistoryStyles.dateText}>
-                  {formatDate(entry.date)}
+                  {entry.title || 'Conversation'}
                 </Text>
                 <View style={chatHistoryStyles.avatarRow}>
-                  {entry.birdIds.map(birdId => {
+                  {entry.birds.map(birdId => {
                     const bird = BIRDS.find(b => b.id === birdId);
                     if (!bird) return null;
                     
@@ -176,6 +151,11 @@ export const ChatHistoryScreen: React.FC<ChatHistoryScreenProps> = ({
                     );
                   })}
                 </View>
+                {!!entry.updated_at && (
+                  <Text style={[chatHistoryStyles.dateText, { fontSize: 14, opacity: 0.7, marginTop: 8 }]}>
+                    {formatDate(entry.updated_at)}
+                  </Text>
+                )}
               </View>
               <View style={chatHistoryStyles.arrowContainer}>
                 <Image

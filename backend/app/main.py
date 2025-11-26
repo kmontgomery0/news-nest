@@ -4,13 +4,14 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import re
+from datetime import datetime, timezone
 
 from .config import get_newsapi_key, get_gemini_api_key, get_env_debug
 from .newsapi_client import fetch_news
 from .agents import POLLY, FLYNN, PIXEL, CATO
 from .news_helper import get_news_context
 from .auth import router as auth_router
-from .mongo import get_users_collection, get_mongo_client, get_db
+from .mongo import get_users_collection, get_mongo_client, get_db, get_chat_sessions_collection
 
 
 app = FastAPI(title="News Nest API", version="0.1.0")
@@ -150,6 +151,18 @@ AGENTS = {
     "flynn": FLYNN,
     "pixel": PIXEL,
     "cato": CATO,
+}
+
+# Map human-readable agent names to ids
+AGENT_NAME_TO_ID = {
+    "polly": "polly",
+    "polly the parrot": "polly",
+    "flynn": "flynn",
+    "flynn the falcon": "flynn",
+    "pixel": "pixel",
+    "pixel the pigeon": "pixel",
+    "cato": "cato",
+    "cato the crane": "cato",
 }
 
 @app.get("/agents/polly/welcome", response_model=ChatResponse)
@@ -454,6 +467,150 @@ def detect_current_agent_from_history(conversation_history: Optional[List[Dict[s
     return None
 
 
+class SaveChatRequest(BaseModel):
+    email: str
+    history: List[Dict[str, Any]]
+    parrot_name: Optional[str] = None
+
+
+def extract_birds_from_history(history: List[Dict[str, Any]]) -> List[str]:
+    """Extract agent IDs involved in the conversation from history parts metadata."""
+    birds: set[str] = set()
+    # Scan all model messages and look for agent tags or names
+    for item in history:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        parts = item.get("parts") or []
+        if role != "model":
+            continue
+        text = " ".join([str(p) for p in parts]).lower()
+        # Metadata pattern "[Agent: Name]"
+        meta_match = re.search(r'\[agent:\s*([^\]]+)\]', text)
+        if meta_match:
+            name = meta_match.group(1).strip().lower()
+            for human, agent_id in AGENT_NAME_TO_ID.items():
+                if human in name:
+                    birds.add(agent_id)
+        # Also check plain names
+        for human, agent_id in AGENT_NAME_TO_ID.items():
+            if human in text:
+                birds.add(agent_id)
+    # Always include polly if nothing detected (host)
+    if not birds:
+        birds.add("polly")
+    return sorted(list(birds))
+
+
+def generate_chat_title(history: List[Dict[str, Any]], parrot_name: Optional[str] = None) -> str:
+    """
+    Use Gemini to generate a concise, descriptive title for the chat.
+    Falls back to a heuristic if no API key or on error.
+    """
+    api_key = get_gemini_api_key()
+    # Build a compact transcript snippet (last ~12 entries) for titling
+    recent = history[-12:] if len(history) > 12 else history
+    lines: List[str] = []
+    for item in recent:
+        if not isinstance(item, dict) or "role" not in item or "parts" not in item:
+            continue
+        role = "User" if item["role"] == "user" else "Assistant"
+        text = " ".join([str(p) for p in (item["parts"] or [])])
+        # Strip metadata
+        text = re.sub(r'\s*\[Agent:\s*[^\]]+\]\s*$', '', text, flags=re.IGNORECASE)
+        # Truncate long lines
+        if len(text) > 200:
+            text = text[:200] + "..."
+        lines.append(f"{role}: {text}")
+    transcript = "\n".join(lines)[:2000]  # hard cap
+
+    if not api_key:
+        # Heuristic fallback: first user line or generic
+        first_user = next((re.sub(r'^User:\s*', '', l) for l in lines if l.startswith("User:")), "")
+        simple = first_user.strip()[:60] if first_user else "News Nest Conversation"
+        return simple if simple else "News Nest Conversation"
+
+    try:
+        from .gemini import gemini_generate
+        system_prompt = (
+            "You create short, descriptive chat titles for a conversation between a user "
+            f"and a news assistant{' named ' + parrot_name if parrot_name else ''}. "
+            "Requirements:\n"
+            "- 5 to 9 words, concise and specific\n"
+            "- No quotes, punctuation minimal, Title Case\n"
+            "- Reflect the main topic(s) discussed\n"
+            "- Avoid generic words like 'Chat', 'Conversation'\n"
+        )
+        user_prompt = f"Create a title for this conversation:\n\n{transcript}\n\nTitle:"
+        result = gemini_generate(contents=[{"role": "user", "parts": [user_prompt]}], system_prompt=system_prompt, api_key=api_key)
+        title = (result.get("text") or "").strip().splitlines()[0]
+        # Clean title
+        title = title.strip().strip('"').strip("'")
+        # Guardrails
+        if not title or len(title) < 3:
+            raise ValueError("Empty title")
+        if len(title) > 80:
+            title = title[:80]
+        return title
+    except Exception:
+        # Fallback on error: simple heuristic
+        first_user = next((re.sub(r'^User:\s*', '', l) for l in lines if l.startswith("User:")), "")
+        simple = first_user.strip()[:60] if first_user else "News Nest Conversation"
+        return simple if simple else "News Nest Conversation"
+
+
+@app.post("/chats/save")
+def save_chat(payload: SaveChatRequest):
+    """
+    Persist a chat session with a descriptive title and involved birds.
+    'history' should be a list of items like { role: 'user'|'model', parts: [text] }.
+    """
+    email = (payload.email or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required.")
+    history = payload.history or []
+    if not isinstance(history, list) or len(history) == 0:
+        raise HTTPException(status_code=400, detail="History must be a non-empty list.")
+    # Generate title and birds
+    birds = extract_birds_from_history(history)
+    title = generate_chat_title(history, parrot_name=payload.parrot_name)
+    now = datetime.now(timezone.utc)
+    doc = {
+        "email": email,
+        "title": title,
+        "birds": birds,
+        "messages": history,
+        "created_at": now,
+        "updated_at": now,
+    }
+    coll = get_chat_sessions_collection()
+    result = coll.insert_one(doc)
+    return {
+        "success": True,
+        "id": str(result.inserted_id),
+        "title": title,
+        "birds": birds,
+    }
+
+
+@app.get("/chats/history")
+def get_chat_history(email: str):
+    """Return saved chat sessions for a user, newest first."""
+    normalized = (email or "").strip().lower()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Email is required.")
+    coll = get_chat_sessions_collection()
+    cursor = coll.find({"email": normalized}, {"messages": 0}).sort("updated_at", -1)
+    sessions = []
+    for doc in cursor:
+        sessions.append({
+            "id": str(doc.get("_id")),
+            "title": doc.get("title") or "Conversation",
+            "birds": doc.get("birds") or [],
+            "updated_at": doc.get("updated_at").isoformat() if doc.get("updated_at") else None,
+            "created_at": doc.get("created_at").isoformat() if doc.get("created_at") else None,
+        })
+    return {"sessions": sessions}
 @app.post("/agents/route-only")
 async def route_only(request: ChatRequest):
     """Smart routing endpoint using Gemini API to detect topic changes and route appropriately."""

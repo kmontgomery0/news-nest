@@ -13,7 +13,7 @@ import {
   Animated,
 } from 'react-native';
 import {Message, ConversationHistoryItem} from '../types';
-import {sendMessage} from '../services/api';
+import {sendMessage, saveChatHistory} from '../services/api';
 import {splitIntoParagraphs} from '../utils/textUtils';
 import {getInitialChunk, getNextChunk, splitIntoMessageChunks} from '../utils/messageUtils';
 import {API_BASE_URL} from '../constants/api';
@@ -32,6 +32,7 @@ interface ConversationScreenProps {
   };
   userName?: string;
   parrotName?: string;
+  email?: string;
   onBack?: () => void;
   onNavigateToHome?: () => void;
   onNavigateToSettings?: () => void;
@@ -43,6 +44,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   selectedBird,
   userName = 'Nicole',
   parrotName = 'Polly',
+  email,
   onBack,
   onNavigateToHome,
   onNavigateToSettings,
@@ -370,6 +372,23 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     return history;
   };
 
+  // Persist chat on leave (back or navigation)
+  const persistChatOnLeave = async () => {
+    try {
+      if (!email) return;
+      // Build full history including current messages (excluding welcome and routing)
+      const history = buildConversationHistory();
+      // Only save if there's at least one user + one agent message
+      const hasUser = history.some(h => h.role === 'user');
+      const hasAgent = history.some(h => h.role === 'model');
+      if (!hasUser || !hasAgent) return;
+      await saveChatHistory(email, history, parrotName);
+    } catch (e) {
+      // non-blocking
+      console.warn('persistChatOnLeave error', e);
+    }
+  };
+
   const handleSendMessage = async () => {
     const message = inputText.trim();
     if (!message || isLoading) return;
@@ -482,19 +501,30 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   };
 
   const handleNavigate = (screen: 'home' | 'chat' | 'history' | 'settings') => {
-    if (screen === 'home') {
-      if (onNavigateToHome) {
-        onNavigateToHome();
-      } else if (onBack) {
-        onBack();
+    // Save chat before leaving this screen
+    const leave = async () => {
+      try {
+        await persistChatOnLeave();
+      } catch (e) {
+        // non-blocking
+        console.warn('Failed to save chat on leave', e);
+      } finally {
+        if (screen === 'home') {
+          if (onNavigateToHome) {
+            onNavigateToHome();
+          } else if (onBack) {
+            onBack();
+          }
+        } else if (screen === 'settings' && onNavigateToSettings) {
+          onNavigateToSettings();
+        } else if (screen === 'chat') {
+          // Already on chat screen
+        } else if (screen === 'history' && onNavigateToHistory) {
+          onNavigateToHistory();
+        }
       }
-    } else if (screen === 'settings' && onNavigateToSettings) {
-      onNavigateToSettings();
-    } else if (screen === 'chat') {
-      // Already on chat screen, no action needed
-    } else if (screen === 'history' && onNavigateToHistory) {
-      onNavigateToHistory();
-    }
+    };
+    leave();
   };
 
   return (
@@ -512,7 +542,15 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           {onBack ? (
             <TouchableOpacity
               style={conversationStyles.headerButton}
-              onPress={onBack}>
+              onPress={async () => {
+                try {
+                  await persistChatOnLeave();
+                } catch (e) {
+                  console.warn('Failed to save chat on back', e);
+                } finally {
+                  onBack && onBack();
+                }
+              }}>
               <Image
                 source={require('../assets/back.png')}
                 style={conversationStyles.headerButtonImage}

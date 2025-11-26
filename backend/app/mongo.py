@@ -42,3 +42,18 @@ def get_user_preferences_collection() -> Collection:
     return coll
 
 
+def get_chat_sessions_collection() -> Collection:
+    """
+    Chat sessions collection storing lightweight session metadata for history:
+    - email: user identifier (lowercased)
+    - title: human-friendly title for the chat
+    - birds: list of agent ids involved, e.g., ['polly', 'flynn']
+    - created_at / updated_at
+    """
+    db = get_db()
+    coll = db["chat_sessions"]
+    # Useful indexes: query by user and sort by recency
+    coll.create_index([("email", ASCENDING), ("updated_at", ASCENDING)], background=True)
+    return coll
+
+

@@ -194,3 +194,36 @@ export const getAgents = async () => {
   
   return data;
 };
+
+/**
+ * Save a complete chat history when a user leaves a chat.
+ */
+export const saveChatHistory = async (email: string, history: ConversationHistoryItem[], parrotName?: string) => {
+  const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.CHATS_SAVE}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email,
+      history,
+      parrot_name: parrotName || undefined,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.detail || 'Failed to save chat history');
+  }
+  return data as { success: boolean; id: string; title: string; birds: string[] };
+};
+
+/**
+ * Fetch saved chat history sessions for a user.
+ */
+export const getChatHistory = async (email: string) => {
+  const url = `${API_BASE_URL}${API_ENDPOINTS.CHATS_HISTORY}?email=${encodeURIComponent(email)}`;
+  const response = await fetch(url, { method: 'GET' });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.detail || 'Failed to fetch chat history');
+  }
+  return data as { sessions: { id: string; title: string; birds: string[]; updated_at?: string; created_at?: string }[] };
+};
