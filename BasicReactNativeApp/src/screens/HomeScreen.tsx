@@ -101,7 +101,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </Text>
           </View>
           <Text style={homeStyles.pollyInstruction}>
-            Tap on Polly to start a chat!
+            Tap on {parrotName} to start a chat!
           </Text>
         </TouchableOpacity>
 

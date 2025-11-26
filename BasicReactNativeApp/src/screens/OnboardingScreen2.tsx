@@ -80,7 +80,6 @@ export const OnboardingScreen2: React.FC<OnboardingScreen2Props> = ({ onNext, on
               { id: 'afternoon', icon: '🌤️', title: 'Afternoon', sub: '(1 PM)' },
               { id: 'evening', icon: '🌆', title: 'Evening', sub: '(5 PM)' },
               { id: 'night', icon: '🌙', title: 'Night', sub: '(9 PM)' },
-              { id: 'custom', icon: '⏰', title: 'Custom', sub: '' },
             ].map(item => {
               const active = selectedTimes.includes(item.id);
               return (

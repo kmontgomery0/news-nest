@@ -3,7 +3,7 @@ import {View, Text, TouchableOpacity, Switch} from 'react-native';
 import {settingsStyles} from '../../styles/settingsStyles';
 
 interface NotificationsTabProps {
-  selectedTime: string;
+  selectedTimes: string[]; // keys like 'morning','afternoon','evening','night'
   frequency: string;
   pushNotifications: boolean;
   emailSummaries: boolean;
@@ -11,11 +11,11 @@ interface NotificationsTabProps {
   allowChatHistory: boolean;
   showTimeDropdown: boolean;
   showFrequencyDropdown: boolean;
-  timeOptions: string[];
+  timeOptions: { key: string; label: string }[];
   frequencyOptions: string[];
   onTimeDropdownToggle: () => void;
   onFrequencyDropdownToggle: () => void;
-  onTimeSelect: (time: string) => void;
+  onToggleTime: (timeKey: string) => void;
   onFrequencySelect: (freq: string) => void;
   onPushNotificationsChange: (value: boolean) => void;
   onEmailSummariesChange: (value: boolean) => void;
@@ -24,7 +24,7 @@ interface NotificationsTabProps {
 }
 
 export const NotificationsTab: React.FC<NotificationsTabProps> = ({
-  selectedTime,
+  selectedTimes,
   frequency,
   pushNotifications,
   emailSummaries,
@@ -36,13 +36,16 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
   frequencyOptions,
   onTimeDropdownToggle,
   onFrequencyDropdownToggle,
-  onTimeSelect,
+  onToggleTime,
   onFrequencySelect,
   onPushNotificationsChange,
   onEmailSummariesChange,
   onDontPersonalizeChange,
   onAllowChatHistoryChange,
 }) => {
+  const selectedLabel = selectedTimes.length
+    ? timeOptions.filter(o => selectedTimes.includes(o.key)).map(o => o.label).join(', ')
+    : 'Select times';
   return (
     <View style={settingsStyles.tabContent}>
       <View style={settingsStyles.section}>
@@ -51,30 +54,32 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
           <TouchableOpacity
             style={[settingsStyles.dropdown, settingsStyles.inputInactive]}
             onPress={onTimeDropdownToggle}>
-            <Text style={settingsStyles.dropdownText}>{selectedTime}</Text>
+            <Text style={settingsStyles.dropdownText}>{selectedLabel}</Text>
             <Text style={settingsStyles.dropdownArrow}>
               {showTimeDropdown ? '▲' : '▼'}
             </Text>
           </TouchableOpacity>
           {showTimeDropdown && (
             <View style={settingsStyles.dropdownOptions}>
-              {timeOptions.map(option => (
+              {timeOptions.map(option => {
+                const active = selectedTimes.includes(option.key);
+                return (
                 <TouchableOpacity
-                  key={option}
+                  key={option.key}
                   style={[
                     settingsStyles.dropdownOption,
-                    selectedTime === option && settingsStyles.dropdownOptionSelected,
+                    active && settingsStyles.dropdownOptionSelected,
                   ]}
-                  onPress={() => onTimeSelect(option)}>
+                  onPress={() => onToggleTime(option.key)}>
                   <Text
                     style={[
                       settingsStyles.dropdownOptionText,
-                      selectedTime === option && settingsStyles.dropdownOptionTextSelected,
+                      active && settingsStyles.dropdownOptionTextSelected,
                     ]}>
-                    {option}
+                    {option.label}
                   </Text>
                 </TouchableOpacity>
-              ))}
+              )})}
             </View>
           )}
         </View>

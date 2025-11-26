@@ -105,9 +105,9 @@ function App(): JSX.Element {
           ) : (
             <OnboardingScreen2
               onSubmitPreferences={async (prefs) => {
-                // Save preferences after successful registration; we need email from onboardingEmail
                 try {
                   if (!onboardingEmail) return;
+                  // 1) Save preferences
                   await saveUserPreferences({
                     email: onboardingEmail,
                     parrot_name: prefs.parrot_name,
@@ -117,8 +117,32 @@ function App(): JSX.Element {
                     email_summaries: prefs.email_summaries,
                     topics: prefs.topics,
                   });
+                  // 2) Fetch fresh profile + prefs from backend and hydrate UI state
+                  const [profile, freshPrefs] = await Promise.all([
+                    getUserProfile(onboardingEmail),
+                    getUserPreferences(onboardingEmail),
+                  ]);
+                  if (profile?.name) setUserName(profile.name);
+                  if (freshPrefs?.parrot_name) setParrotName(freshPrefs.parrot_name);
+                  if (Array.isArray(freshPrefs?.topics)) {
+                    const mapTopicToBird: Record<string, string> = {
+                      'sports': 'flynn',
+                      'technology': 'pixel',
+                      'politics': 'cato',
+                      'entertainment': 'pizzazz',
+                      'business': 'edwin',
+                      'crime-legal': 'credo',
+                      'science-environment': 'gaia',
+                      'feel-good': 'happy',
+                      'history-trends': 'omni',
+                    };
+                    const birds = freshPrefs.topics
+                      .map((t: string) => mapTopicToBird[t])
+                      .filter((id: string | undefined): id is string => !!id);
+                    if (birds.length) setSelectedBirdIds(birds);
+                  }
                 } catch (e) {
-                  console.warn('Saving preferences failed', e);
+                  console.warn('Saving or hydrating preferences failed', e);
                 }
               }}
               onNext={async () => {
