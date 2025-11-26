@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
+import time
 import requests
 
 
@@ -47,14 +48,58 @@ def fetch_news(
     if exclude_domains:
         params["excludeDomains"] = exclude_domains
 
-    response = requests.get(endpoint, params=params, timeout=20)
-    response.raise_for_status()
-    data = response.json()
-
-    if data.get("status") != "ok":
-        raise RuntimeError(f"NewsAPI returned error: {data}")
-
-    return data
+    max_attempts = 3
+    last_error_msg: Optional[str] = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.get(endpoint, params=params, timeout=20)
+            response.raise_for_status()
+            data = response.json()
+            if data.get("status") != "ok":
+                # Surface NewsAPI application-level errors
+                message = data.get("message") or str(data)
+                # Retry only if rate limited is indicated
+                if attempt < max_attempts and ("rate" in message.lower() or "too many" in message.lower()):
+                    delay_seconds = 0.5 * (2 ** (attempt - 1))
+                    time.sleep(delay_seconds)
+                    continue
+                raise RuntimeError(f"NewsAPI error: {message}")
+            return data
+        except requests.exceptions.HTTPError as http_err:
+            status = getattr(http_err.response, "status_code", None)
+            last_error_msg = f"HTTP {status}: {str(http_err)}"
+            # Do not retry on auth or client errors except rate limit
+            if status in (401, 403):
+                raise RuntimeError("Invalid NewsAPI key or unauthorized. Please verify NEWSAPI_KEY.") from http_err
+            if status == 429:
+                if attempt < max_attempts:
+                    delay_seconds = 0.5 * (2 ** (attempt - 1))
+                    time.sleep(delay_seconds)
+                    continue
+                raise RuntimeError("NewsAPI rate limit reached. Please wait a moment and try again.") from http_err
+            # Retry on transient server errors
+            if status in (500, 502, 503, 504) and attempt < max_attempts:
+                delay_seconds = 0.5 * (2 ** (attempt - 1))
+                time.sleep(delay_seconds)
+                continue
+            # Other HTTP errors: surface without retry
+            raise RuntimeError(f"Failed to fetch news (HTTP {status}). Please try again later.") from http_err
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as net_err:
+            last_error_msg = str(net_err)
+            if attempt < max_attempts:
+                delay_seconds = 0.5 * (2 ** (attempt - 1))
+                time.sleep(delay_seconds)
+                continue
+            raise RuntimeError("Network issue when contacting NewsAPI. Please try again shortly.") from net_err
+        except Exception as exc:
+            last_error_msg = str(exc)
+            if attempt < max_attempts:
+                delay_seconds = 0.5 * (2 ** (attempt - 1))
+                time.sleep(delay_seconds)
+                continue
+            raise RuntimeError(f"Unexpected error fetching news: {str(exc)[:200]}") from exc
+    # Fallback (should not reach here)
+    raise RuntimeError(f"Unable to fetch news after retries. Last error: {last_error_msg}")
 
 
 def fetch_top_headlines(
@@ -83,12 +128,50 @@ def fetch_top_headlines(
     if q:
         params["q"] = q
 
-    response = requests.get(endpoint, params=params, timeout=20)
-    response.raise_for_status()
-    data = response.json()
-
-    if data.get("status") != "ok":
-        raise RuntimeError(f"NewsAPI returned error: {data}")
-
-    return data
+    max_attempts = 3
+    last_error_msg: Optional[str] = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.get(endpoint, params=params, timeout=20)
+            response.raise_for_status()
+            data = response.json()
+            if data.get("status") != "ok":
+                message = data.get("message") or str(data)
+                if attempt < max_attempts and ("rate" in message.lower() or "too many" in message.lower()):
+                    delay_seconds = 0.5 * (2 ** (attempt - 1))
+                    time.sleep(delay_seconds)
+                    continue
+                raise RuntimeError(f"NewsAPI error: {message}")
+            return data
+        except requests.exceptions.HTTPError as http_err:
+            status = getattr(http_err.response, "status_code", None)
+            last_error_msg = f"HTTP {status}: {str(http_err)}"
+            if status in (401, 403):
+                raise RuntimeError("Invalid NewsAPI key or unauthorized. Please verify NEWSAPI_KEY.") from http_err
+            if status == 429:
+                if attempt < max_attempts:
+                    delay_seconds = 0.5 * (2 ** (attempt - 1))
+                    time.sleep(delay_seconds)
+                    continue
+                raise RuntimeError("NewsAPI rate limit reached. Please wait a moment and try again.") from http_err
+            if status in (500, 502, 503, 504) and attempt < max_attempts:
+                delay_seconds = 0.5 * (2 ** (attempt - 1))
+                time.sleep(delay_seconds)
+                continue
+            raise RuntimeError(f"Failed to fetch headlines (HTTP {status}). Please try again later.") from http_err
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as net_err:
+            last_error_msg = str(net_err)
+            if attempt < max_attempts:
+                delay_seconds = 0.5 * (2 ** (attempt - 1))
+                time.sleep(delay_seconds)
+                continue
+            raise RuntimeError("Network issue when contacting NewsAPI. Please try again shortly.") from net_err
+        except Exception as exc:
+            last_error_msg = str(exc)
+            if attempt < max_attempts:
+                delay_seconds = 0.5 * (2 ** (attempt - 1))
+                time.sleep(delay_seconds)
+                continue
+            raise RuntimeError(f"Unexpected error fetching headlines: {str(exc)[:200]}") from exc
+    raise RuntimeError(f"Unable to fetch headlines after retries. Last error: {last_error_msg}")
 

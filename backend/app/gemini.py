@@ -40,24 +40,36 @@ def gemini_generate(
             text = content.get("text") or content.get("message") or str(content)
             formatted_contents.append({"role": "user", "parts": [text]})
 
-    try:
-        response = model.generate_content(formatted_contents)
-        text = response.text if hasattr(response, "text") and response.text else ""
-        return {"text": text, "raw": response}
-    except Exception as e:
-        error_msg = str(e)
-        # Check if it's a quota error
-        if "429" in error_msg or "quota" in error_msg.lower() or "Quota exceeded" in error_msg:
-            # Extract retry delay if available
-            if "retry_delay" in error_msg or "retry in" in error_msg.lower():
+    # Retry strategy: up to 3 attempts with exponential backoff
+    max_attempts = 3
+    last_error_msg = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = model.generate_content(formatted_contents)
+            text = response.text if hasattr(response, "text") and response.text else ""
+            return {"text": text, "raw": response}
+        except Exception as e:
+            error_msg = str(e)
+            last_error_msg = error_msg
+            is_quota = (
+                "429" in error_msg
+                or "quota" in error_msg.lower()
+                or "quota exceeded" in error_msg.lower()
+            )
+            # If not last attempt, wait then retry
+            if attempt < max_attempts:
+                # Gentle exponential backoff
+                delay_seconds = 0.5 * (2 ** (attempt - 1))
+                time.sleep(delay_seconds)
+                continue
+            # On final failure, raise a user-friendly error
+            if is_quota:
                 raise ValueError(
-                    f"API quota exceeded. Please wait a moment before trying again. "
-                    f"Original error: {error_msg[:200]}"
+                    "Gemini rate limit reached. Please wait a moment and try again. "
+                    f"Details: {error_msg[:200]}"
                 )
-            else:
-                raise ValueError(
-                    f"API quota exceeded. Please wait a moment or check your API key limits. "
-                    f"Original error: {error_msg[:200]}"
-                )
-        raise ValueError(f"Error generating content: {error_msg}")
+            raise ValueError(
+                "We hit a temporary issue contacting Gemini. Please try again shortly. "
+                f"Details: {error_msg[:200]}"
+            )
 
