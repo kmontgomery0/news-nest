@@ -11,6 +11,7 @@ import {ProfileTab} from '../components/settings/ProfileTab';
 import {TopicsTab} from '../components/settings/TopicsTab';
 import {NotificationsTab} from '../components/settings/NotificationsTab';
 import {settingsStyles} from '../styles/settingsStyles';
+import { saveUserPreferences } from '../services/api';
 
 interface SettingsScreenProps {
   userName?: string;
@@ -103,6 +104,44 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     'Custom',
   ];
 
+  // Map bird ids to topics used in preferences
+  const birdIdToTopic: Record<string, string> = {
+    'flynn': 'sports',
+    'pixel': 'technology',
+    'cato': 'politics',
+    'pizzazz': 'entertainment',
+    'edwin': 'business',
+    'credo': 'crime-legal',
+    'gaia': 'science-environment',
+    'happy': 'feel-good',
+    'omni': 'history-trends',
+  };
+
+  // Persist preferences helper
+  const persistPreferences = async (partial?: {
+    parrot_name?: string;
+    topics?: string[];
+    push_notifications?: boolean;
+    email_summaries?: boolean;
+    times?: string[];
+    frequency?: string;
+  }) => {
+    if (!email) return;
+    try {
+      await saveUserPreferences({
+        email,
+        parrot_name: partial?.parrot_name ?? parrotNameState,
+        topics: partial?.topics ?? selectedBirdIds.map(id => birdIdToTopic[id]).filter(Boolean),
+        push_notifications: partial?.push_notifications ?? pushNotifications,
+        email_summaries: partial?.email_summaries ?? emailSummaries,
+        times: partial?.times ?? [selectedTime],
+        frequency: partial?.frequency ?? frequency,
+      });
+    } catch (e) {
+      console.warn('Failed to save preferences', e);
+    }
+  };
+
   const handleBirdToggle = (birdId: string) => {
     if (selectedBirdIds.includes(birdId)) {
       setSelectedBirdIds(selectedBirdIds.filter(id => id !== birdId));
@@ -116,6 +155,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     if (onSaveProfile) {
       onSaveProfile(name, parrotNameState);
     }
+    // Also persist as preference (parrot_name)
+    persistPreferences({ parrot_name: parrotNameState });
   };
 
   // Auto-save nests when they change
@@ -123,16 +164,24 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     if (onSaveNests) {
       onSaveNests(selectedBirdIds);
     }
+    // Persist topics to preferences
+    persistPreferences({
+      topics: selectedBirdIds.map(id => birdIdToTopic[id]).filter(Boolean),
+    });
   }, [selectedBirdIds, onSaveNests]);
 
   const handleTimeSelect = (time: string) => {
     setSelectedTime(time);
     setShowTimeDropdown(false);
+    // Persist selected time
+    persistPreferences({ times: [time] });
   };
 
   const handleFrequencySelect = (freq: string) => {
     setFrequency(freq);
     setShowFrequencyDropdown(false);
+    // Persist selected frequency
+    persistPreferences({ frequency: freq });
   };
 
   const handleTimeDropdownToggle = () => {
@@ -144,6 +193,15 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     setShowFrequencyDropdown(!showFrequencyDropdown);
     setShowTimeDropdown(false);
   };
+
+  // Persist notification toggles
+  useEffect(() => {
+    persistPreferences({ push_notifications: pushNotifications });
+  }, [pushNotifications]);
+
+  useEffect(() => {
+    persistPreferences({ email_summaries: emailSummaries });
+  }, [emailSummaries]);
 
   const handleNavigate = (screen: 'home' | 'chat' | 'history' | 'settings') => {
     if (screen === 'home' && onNavigateToHome) {
