@@ -192,11 +192,12 @@ function App(): JSX.Element {
                   if (birds.length) setSelectedBirdIds(birds);
                 }
                 setIsAuthenticated(true);
-                setShowEnter(true);
+                // Do not show Enter again after login
+                setShowEnter(false);
               } catch (e) {
                 console.warn('Failed to load user data', e);
                 setIsAuthenticated(true);
-                setShowEnter(true);
+                setShowEnter(false);
               }
             }}
             onJoinFlock={() => {
