@@ -71,6 +71,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   );
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSavingHistory, setIsSavingHistory] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState<{
     id: string;
     agentName: string;
@@ -432,10 +433,13 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       const hasUser = history.some(h => h.role === 'user');
       const hasAgent = history.some(h => h.role === 'model');
       if (!hasUser || !hasAgent) return;
+      setIsSavingHistory(true);
       await saveChatHistory(email, history, parrotName);
     } catch (e) {
       // non-blocking
       console.warn('persistChatOnLeave error', e);
+    } finally {
+      setIsSavingHistory(false);
     }
   };
 
@@ -720,6 +724,12 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
             </View>
           );
         })}
+        {isSavingHistory && (
+          <View style={conversationStyles.loadingContainer}>
+            <ActivityIndicator size="small" color="#667eea" />
+            <Text style={conversationStyles.loadingText}>Saving...</Text>
+          </View>
+        )}
         {isLoading && (
           <View style={conversationStyles.loadingContainer}>
             <ActivityIndicator size="small" color="#667eea" />

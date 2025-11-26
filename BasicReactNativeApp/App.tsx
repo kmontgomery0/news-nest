@@ -36,6 +36,8 @@ function App(): JSX.Element {
   const [settingsInitialTab, setSettingsInitialTab] = useState<'profile' | 'topics' | 'notifications'>('profile');
 
   const handleSelectBird = (bird: Bird) => {
+    // Starting a new chat from Home: ensure no previous session is loaded
+    setChatSessionId(null);
     setSelectedBird(bird);
     setShowConversation(true);
   };
