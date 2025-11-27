@@ -186,6 +186,14 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     }
   }, [messages, streamingMessage]);
 
+  // Ensure "Saving..." status is visible by auto-scrolling when it appears
+  useEffect(() => {
+    if (isSavingHistory) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({animated: true});
+      }, 50);
+    }
+  }, [isSavingHistory]);
   // Cleanup intervals on unmount
   useEffect(() => {
     return () => {
