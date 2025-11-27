@@ -12,6 +12,7 @@ interface TopicsTabProps {
   parrotName?: string;
   onParrotNameChange?: (name: string) => void;
   onSaveParrotName?: () => void;
+  onSave?: () => void;
 }
 
 export const TopicsTab: React.FC<TopicsTabProps> = ({
@@ -20,6 +21,7 @@ export const TopicsTab: React.FC<TopicsTabProps> = ({
   parrotName = 'Polly',
   onParrotNameChange,
   onSaveParrotName,
+  onSave,
 }) => {
   const [isParrotNameEdited, setIsParrotNameEdited] = useState(false);
 
@@ -134,6 +136,9 @@ export const TopicsTab: React.FC<TopicsTabProps> = ({
           })}
           </View>
         </View>
+        <TouchableOpacity style={settingsStyles.saveButton} onPress={onSave}>
+          <Text style={settingsStyles.saveButtonText}>Save</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );

@@ -21,6 +21,7 @@ interface NotificationsTabProps {
   onEmailSummariesChange: (value: boolean) => void;
   onDontPersonalizeChange: (value: boolean) => void;
   onAllowChatHistoryChange: (value: boolean) => void;
+  onSave?: () => void;
 }
 
 export const NotificationsTab: React.FC<NotificationsTabProps> = ({
@@ -42,6 +43,7 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
   onEmailSummariesChange,
   onDontPersonalizeChange,
   onAllowChatHistoryChange,
+  onSave,
 }) => {
   const selectedLabel = selectedTimes.length
     ? timeOptions.filter(o => selectedTimes.includes(o.key)).map(o => o.label).join(', ')
@@ -168,7 +170,7 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({
             />
           </View>
         </View>
-        <TouchableOpacity style={settingsStyles.saveButton}>
+        <TouchableOpacity style={settingsStyles.saveButton} onPress={onSave}>
           <Text style={settingsStyles.saveButtonText}>Save</Text>
         </TouchableOpacity>
       </View>

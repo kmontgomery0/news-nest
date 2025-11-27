@@ -224,6 +224,23 @@ export const settingsStyles = StyleSheet.create({
     color: text_dark_gray_color,
     fontWeight: '600',
   },
+  savedToast: {
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#000000',
+    backgroundColor: surface_white_color,
+    borderRadius: 10,
+  },
+  savedToastText: {
+    fontSize: 16,
+    fontFamily: 'Patrick Hand',
+    color: text_primary_brown_color,
+    fontWeight: '700',
+  },
   timeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

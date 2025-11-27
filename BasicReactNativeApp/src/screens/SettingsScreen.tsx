@@ -40,6 +40,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'topics' | 'notifications'>(initialTab);
+  const [showSaved, setShowSaved] = useState(false);
+  const hideSavedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update active tab if parent changes it
   useEffect(() => {
@@ -68,6 +70,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       const { saveUserProfile } = await import('../services/api');
       await saveUserProfile(email, name, password || undefined);
       setPassword('');
+      // Show confirmation
+      if (hideSavedTimeoutRef.current) {
+        clearTimeout(hideSavedTimeoutRef.current);
+      }
+      setShowSaved(true);
+      hideSavedTimeoutRef.current = setTimeout(() => setShowSaved(false), 1500);
     } catch (e) {
       console.warn('Failed to save profile', e);
     }
@@ -159,6 +167,15 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     loadPrefs();
   }, [email]);
 
+  // Cleanup toast timer on unmount
+  useEffect(() => {
+    return () => {
+      if (hideSavedTimeoutRef.current) {
+        clearTimeout(hideSavedTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Map bird ids to topics
   const birdIdToTopic: Record<string, string> = {
     'flynn': 'sports',
@@ -191,6 +208,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         times: partial?.times ?? selectedTimes,
         frequency: partial?.frequency ?? frequency,
       });
+      // Show confirmation
+      if (hideSavedTimeoutRef.current) {
+        clearTimeout(hideSavedTimeoutRef.current);
+      }
+      setShowSaved(true);
+      hideSavedTimeoutRef.current = setTimeout(() => setShowSaved(false), 1500);
     } catch (e) {
       console.warn('Failed to save preferences', e);
     }
@@ -208,24 +231,16 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     if (onSaveProfile) {
       onSaveProfile(name, parrotNameState);
     }
-    if (prefsHydratedRef.current) {
-      persistPreferences({ parrot_name: parrotNameState });
-    }
   };
 
   // Save topics when changed (after hydration)
   useEffect(() => {
     if (!prefsHydratedRef.current) return;
-    if (onSaveNests) onSaveNests(selectedBirdIds);
-    persistPreferences({ topics: selectedBirdIds.map(id => birdIdToTopic[id]).filter(Boolean) });
   }, [selectedBirdIds]);
 
   const handleToggleTime = (timeKey: string) => {
     setSelectedTimes(prev => {
       const next = prev.includes(timeKey) ? prev.filter(k => k !== timeKey) : [...prev, timeKey];
-      if (prefsHydratedRef.current) {
-        persistPreferences({ times: next });
-      }
       return next;
     });
   };
@@ -233,9 +248,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const handleFrequencySelect = (freq: string) => {
     setFrequency(freq);
     setShowTimeDropdown(false);
-    if (prefsHydratedRef.current) {
-      persistPreferences({ frequency: freq });
-    }
   };
 
   const handleTimeDropdownToggle = () => {
@@ -251,12 +263,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   // Save toggle changes after hydration
   useEffect(() => {
     if (!prefsHydratedRef.current) return;
-    persistPreferences({ push_notifications: pushNotifications });
   }, [pushNotifications]);
 
   useEffect(() => {
     if (!prefsHydratedRef.current) return;
-    persistPreferences({ email_summaries: emailSummaries });
   }, [emailSummaries]);
 
   const handleNavigate = (screen: 'home' | 'chat' | 'history' | 'settings') => {
@@ -295,6 +305,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Saved toast */}
+      {showSaved && (
+        <View style={[settingsStyles.saveButton, {alignSelf: 'center', marginTop: 8, marginBottom: 4}]}>
+          <Text style={settingsStyles.saveButtonText}>Saved!</Text>
+        </View>
+      )}
 
       {/* Tab Navigation */}
       <View style={settingsStyles.tabBar}>
@@ -375,6 +392,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             parrotName={parrotNameState}
             onParrotNameChange={setParrotNameState}
             onSaveParrotName={handleSaveProfile}
+            onSave={() => {
+              if (!prefsHydratedRef.current) return;
+              (async () => {
+                await persistPreferences({ topics: selectedBirdIds.map(id => birdIdToTopic[id]).filter(Boolean) });
+                // Update app-level state only after successful save
+                if (onSaveNests) onSaveNests(selectedBirdIds);
+              })();
+            }}
           />
         )}
         {activeTab === 'notifications' && (
@@ -397,6 +422,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             onEmailSummariesChange={setEmailSummaries}
             onDontPersonalizeChange={setDontPersonalize}
             onAllowChatHistoryChange={setAllowChatHistory}
+            onSave={() => {
+              if (!prefsHydratedRef.current) return;
+              persistPreferences();
+            }}
           />
         )}
       </ScrollView>
