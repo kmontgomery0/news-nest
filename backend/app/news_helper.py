@@ -1,6 +1,7 @@
 """Helper functions for fetching and summarizing news for agents."""
 
 from typing import Optional, Dict, Any, List
+from urllib.parse import urlparse
 from .newsapi_client import fetch_news, fetch_top_headlines
 from .config import get_newsapi_key, get_gemini_api_key
 from .gemini import gemini_generate
@@ -169,6 +170,119 @@ def fetch_top_headlines_structured(
         seen = set()
         needed = min_items if min_items is not None else page_size
         page = 1
+        def _strip_trailing_source_from_title(raw_title: str, source_name: str) -> str:
+            try:
+                title = (raw_title or "").strip()
+                src = (source_name or "").strip()
+                if not title or not src:
+                    return title
+                # Exact suffix patterns: " - Source", " — Source", " | Source"
+                separators = [" - ", " — ", " | "]
+                for sep in separators:
+                    suffix = sep + src
+                    if title.endswith(suffix):
+                        return title[: -len(suffix)].rstrip()
+                # Generic: if last segment equals source (case-insensitive), strip it
+                for sep in separators:
+                    if sep in title:
+                        parts = title.rsplit(sep, 1)
+                        if len(parts) == 2 and parts[1].strip().lower() == src.lower():
+                            return parts[0].rstrip()
+                return title
+            except Exception:
+                return raw_title or ""
+        def _normalize(text: str) -> str:
+            t = (text or "").lower().strip()
+            # remove common punctuation and dots in domains
+            for ch in [".", ",", "-", "_", " "]:
+                t = t.replace(ch, "")
+            # strip common tld tokens
+            for token in ["com", "org", "net", "news", "www"]:
+                t = t.replace(token, "")
+            return t
+        def _strip_leading_source_prefix(title: str, source_name: str, url: str) -> str:
+            try:
+                t = (title or "").strip()
+                if not t:
+                    return t
+                src_norm = _normalize(source_name or "")
+                host = ""
+                try:
+                    host = urlparse(url or "").netloc or ""
+                except Exception:
+                    host = ""
+                host_norm = _normalize(host.replace("www.", ""))
+                # Candidate prefixes separated by ': ' or ' - ' or ' | '
+                separators = [": ", " - ", " | ", " — "]
+                for sep in separators:
+                    if sep in t:
+                        prefix, rest = t.split(sep, 1)
+                        prefix_norm = _normalize(prefix)
+                        # If prefix matches source or host, drop it
+                        if prefix_norm and (src_norm and (src_norm in prefix_norm or prefix_norm in src_norm) or (host_norm and host_norm in prefix_norm)):
+                            return rest.strip()
+                return t
+            except Exception:
+                return title
+        def _derive_display_source(source_name: str, url: str) -> str:
+            """Derive a human-readable source name, preferring brand over raw domain."""
+            try:
+                raw = (source_name or "").strip()
+                host = ""
+                try:
+                    host = (urlparse(url or "").netloc or "").lower()
+                except Exception:
+                    host = ""
+                host = host.replace("www.", "")
+                # If raw doesn't look like a domain, prefer it
+                looks_like_domain = "." in raw or raw.lower().endswith((".com", ".org", ".net", ".co", ".io"))
+                base = raw if raw else host
+                if not base:
+                    return raw
+                if looks_like_domain or (raw and raw.lower().replace("www.", "") == host):
+                    # Strip common TLDs and separators
+                    base_no_tld = base
+                    for tld in [".com", ".org", ".net", ".co", ".io"]:
+                        if base_no_tld.lower().endswith(tld):
+                            base_no_tld = base_no_tld[: -len(tld)]
+                            break
+                    base_no_tld = base_no_tld.replace(".", " ").replace("-", " ").replace("_", " ").strip()
+                    # Mappings for frequent brands
+                    mapping = {
+                        "nbcsports": "NBC Sports",
+                        "foxnews": "Fox News",
+                        "cnn": "CNN",
+                        "bbc": "BBC",
+                        "bbcnews": "BBC News",
+                        "nytimes": "The New York Times",
+                        "washingtonpost": "The Washington Post",
+                        "wsj": "The Wall Street Journal",
+                        "apnews": "AP News",
+                        "associatedpress": "AP News",
+                        "reuters": "Reuters",
+                        "espn": "ESPN",
+                        "cbsnews": "CBS News",
+                        "abcnews": "ABC News",
+                    }
+                    key = base_no_tld.lower().replace(" ", "")
+                    if key in mapping:
+                        return mapping[key]
+                    # Insert spaces for CamelCase
+                    import re as _re
+                    s = base_no_tld
+                    s = _re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', s)
+                    s = _re.sub(r'(?<=[A-Z])(?=[A-Z][a-z])', ' ', s)
+                    words = []
+                    for w in s.split():
+                        if w.isupper() and len(w) <= 4:
+                            words.append(w)
+                        else:
+                            words.append(w.capitalize())
+                    pretty = " ".join(words).strip()
+                    return pretty if pretty else raw
+                return raw
+            except Exception:
+                return source_name
         while page <= max_pages and len(items) < needed:
             data = fetch_top_headlines(
                 key,
@@ -182,19 +296,24 @@ def fetch_top_headlines_structured(
             if not articles:
                 break
             for a in articles:
-                title = (a.get("title") or "").strip()
+                raw_title = (a.get("title") or "").strip()
                 url = (a.get("url") or "").strip()
                 source_name = ((a.get("source") or {}).get("name") or "").strip()
-                if not title:
+                if not raw_title:
                     continue
+                # Remove trailing source suffix from title if present
+                title = _strip_trailing_source_from_title(raw_title, source_name)
+                # Remove leading source/domain prefix like "CNN:" or "NBCSports.com: "
+                title = _strip_leading_source_prefix(title, source_name, url)
                 dedup = f"{title}::{source_name}"
                 if dedup in seen:
                     continue
                 seen.add(dedup)
+                display_source = _derive_display_source(source_name, url)
                 items.append({
                     "headline": title,
                     "url": url or None,
-                    "source_name": source_name or None,
+                    "source_name": display_source or (source_name or None),
                 })
                 if len(items) >= needed:
                     break

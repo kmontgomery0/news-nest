@@ -54,7 +54,7 @@ export const NewsArticleCard: React.FC<NewsArticleCardProps> = ({
           {tags.map((t, idx) => (
             <View style={styles.tagPill} key={`${t}-${idx}`}>
               <Text style={styles.tagText}>{String(t || '').trim()}</Text>
-            </View>
+        </View>
           ))}
         </View>
       ) : null}

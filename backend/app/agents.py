@@ -213,33 +213,9 @@ Respond ONLY as JSON with keys:
         if last_user_text:
             intent = self._detect_sports_headlines_intent(last_user_text, api_key)
             wants_headlines = bool(intent.get("wants_headlines", False))
+        # Do NOT inject numbered-list headlines anymore; cards will be rendered on the client.
         if wants_headlines:
-            print("[FlynnAgent] Detected request for sports headlines; attempting fetch...")
-            try:
-                news_key = get_newsapi_key()
-                if news_key:
-                    formatting_instructions = (
-                        COMMON_HEADLINES_FORMATTING + " "
-                        "then end with a brief question about which game, team, or league to explore."
-                    )
-                    result = fetch_headlines_prompt(
-                        country="us",
-                        category="sports",
-                        q=None,
-                        page_size=6,
-                        header_text="Today's top sports headlines:",
-                        formatting_instructions=formatting_instructions,
-                        api_key=news_key,
-                        min_items=5,
-                        max_pages=3,
-                    )
-                    if result and result.get("prompt"):
-                        contents = [{"role": "user", "parts": [result["prompt"]]}] + contents
-                        print(f"[FlynnAgent] Injected {result.get('count', 0)} sports headlines into response context.")
-                else:
-                    print("[FlynnAgent] NEWSAPI_KEY missing; cannot fetch sports headlines.")
-            except Exception:
-                print("[FlynnAgent] Exception while fetching sports headlines; continuing without injection.", flush=True)
+            print("[FlynnAgent] Detected request for sports headlines; skipping numbered-list injection (cards will be used).")
         return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
     
     def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
@@ -349,33 +325,9 @@ Respond ONLY as JSON with keys:
         if last_user_text:
             intent = self._detect_tech_headlines_intent(last_user_text, api_key)
             wants_headlines = bool(intent.get("wants_headlines", False))
+        # Do NOT inject numbered-list headlines anymore; cards will be rendered on the client.
         if wants_headlines:
-            print("[PixelAgent] Detected request for technology headlines; attempting fetch...")
-            try:
-                news_key = get_newsapi_key()
-                if news_key:
-                    formatting_instructions = (
-                        COMMON_HEADLINES_FORMATTING + " "
-                        "then end with a brief question about which topic, device, or company to explore."
-                    )
-                    result = fetch_headlines_prompt(
-                        country="us",
-                        category="technology",
-                        q=None,
-                        page_size=6,
-                        header_text="Today's top technology headlines:",
-                        formatting_instructions=formatting_instructions,
-                        api_key=news_key,
-                        min_items=5,
-                        max_pages=3,
-                    )
-                    if result and result.get("prompt"):
-                        contents = [{"role": "user", "parts": [result["prompt"]]}] + contents
-                        print(f"[PixelAgent] Injected {result.get('count', 0)} technology headlines into response context.")
-                else:
-                    print("[PixelAgent] NEWSAPI_KEY missing; cannot fetch technology headlines.")
-            except Exception:
-                print("[PixelAgent] Exception while fetching technology headlines; continuing without injection.", flush=True)
+            print("[PixelAgent] Detected request for technology headlines; skipping numbered-list injection (cards will be used).")
         return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
     
     def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
@@ -487,33 +439,9 @@ Respond ONLY as JSON with keys:
         if last_user_text:
             intent = self._detect_politics_headlines_intent(last_user_text, api_key)
             wants_headlines = bool(intent.get("wants_headlines", False))
+        # Do NOT inject numbered-list headlines anymore; cards will be rendered on the client.
         if wants_headlines:
-            print("[CatoAgent] Detected request for politics headlines; attempting fetch...")
-            try:
-                news_key = get_newsapi_key()
-                if news_key:
-                    formatting_instructions = (
-                        COMMON_HEADLINES_FORMATTING + " "
-                        "then end with a brief question about which issue, policy, or election to explore."
-                    )
-                    result = fetch_headlines_prompt(
-                        country="us",
-                        category=None,
-                        q="politics OR election OR policy OR government",
-                        page_size=6,
-                        header_text="Today's top politics headlines:",
-                        formatting_instructions=formatting_instructions,
-                        api_key=news_key,
-                        min_items=5,
-                        max_pages=3,
-                    )
-                    if result and result.get("prompt"):
-                        contents = [{"role": "user", "parts": [result["prompt"]]}] + contents
-                        print(f"[CatoAgent] Injected {result.get('count', 0)} politics headlines into response context.")
-                else:
-                    print("[CatoAgent] NEWSAPI_KEY missing; cannot fetch politics headlines.")
-            except Exception:
-                print("[CatoAgent] Exception while fetching politics headlines; continuing without injection.", flush=True)
+            print("[CatoAgent] Detected request for politics headlines; skipping numbered-list injection (cards will be used).")
         return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
     
     def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
@@ -600,6 +528,7 @@ class NewsClassifierAgent(BaseAgent):
             • Detect presence of common bias signals (loaded language, cherry-picking, ad-hominem, sensationalism, unverified claims, selection bias). Explain briefly if observed.
             • Note domain/topic (e.g., politics, sports, technology, entertainment) and whether it is opinion vs straight news.
             • Provide a short justification and note uncertainty when evidence is limited.
+            • Also return a clean_headline that strips any outlet/site name from the beginning or end of the title (e.g., remove prefixes like "CNN:" or "NBCSports.com —" and suffixes like " - NBC Sports"). Do NOT paraphrase the headline text — only remove redundant outlet/site name tokens and separators.
 
             IMPORTANT:
             • Be evidence-based and cautious. If you are not sure, state uncertainty clearly.
@@ -610,6 +539,7 @@ class NewsClassifierAgent(BaseAgent):
 
             OUTPUT FORMAT (ALWAYS return valid JSON only; no extra text):
             {
+              "clean_headline": string,  // headline with outlet name removed from start/end, no paraphrasing
               "source_name": string|null,
               "source_domain": string|null,
               "content_title": string|null,

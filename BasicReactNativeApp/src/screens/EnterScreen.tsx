@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import Svg, { Path, Defs, ClipPath, Rect, G } from 'react-native-svg';
 import svgPaths from '../assets/svg-xwebab38e5';
- 
+
 
 type EnterScreenProps = {
   onGetStarted?: () => void;

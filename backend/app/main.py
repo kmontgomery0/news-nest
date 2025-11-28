@@ -369,16 +369,6 @@ Respond ONLY with a JSON object in this exact format:
             if suggested_agent_id not in AGENTS:
                 suggested_agent_id = "polly"
             
-            suggested_agent = AGENTS[suggested_agent_id]
-            
-            return RouteResponse(
-                suggested_agent=suggested_agent_id,
-                agent_name=suggested_agent.name,
-                confidence=routing_data.get("confidence"),
-                reasoning=routing_data.get("reasoning"),
-                alternative_agents=routing_data.get("alternative_agents", [])
-            )
-        else:
             # Fallback: simple keyword-based routing
             message_lower = request.message.lower()
             if any(word in message_lower for word in ["sport", "game", "team", "player", "score", "football", "basketball", "soccer"]):
@@ -387,8 +377,6 @@ Respond ONLY with a JSON object in this exact format:
                 suggested_agent_id = "pixel"
             elif any(word in message_lower for word in ["politic", "election", "government", "policy", "vote", "civic", "senate", "congress"]):
                 suggested_agent_id = "cato"
-            else:
-                suggested_agent_id = "polly"
             
             return RouteResponse(
                 suggested_agent=suggested_agent_id,
@@ -655,6 +643,15 @@ async def route_only(request: ChatRequest):
     # Detect current agent from conversation history
     current_agent_id = detect_current_agent_from_history(request.conversation_history)
     
+    # If not detectable from history, fall back to the requested agent id
+    if not current_agent_id:
+        try:
+            candidate = (request.agent or "").lower()
+            if candidate in AGENTS:
+                current_agent_id = candidate
+        except Exception:
+            current_agent_id = None
+    
     # Build context for routing decision
     conversation_context = ""
     if request.conversation_history and len(request.conversation_history) > 0:
@@ -724,6 +721,22 @@ Respond ONLY with a JSON object in this exact format:
             if suggested_agent_id not in AGENTS:
                 suggested_agent_id = "polly"
             
+            # Deterministic override: If already talking to a specialist and the user asked generic headlines,
+            # stick with the current specialist (sports/tech/politics) instead of routing to polly.
+            def _is_generic_headlines(msg: str) -> bool:
+                ml = (msg or "").lower().strip()
+                headline_words = ["headline", "headlines", "top news", "top stories", "news today", "today's news"]
+                has_headline = any(h in ml for h in headline_words)
+                domain_words = [
+                    "sport", "game", "team", "player", "score", "football", "basketball", "soccer", "nba", "nfl", "baseball",
+                    "tech", "technology", "ai", "software", "app", "digital", "computer", "code", "programming", "gadget", "device",
+                    "politic", "election", "government", "policy", "vote", "civic", "senate", "congress", "president", "democrat", "republican"
+                ]
+                has_domain = any(w in ml for w in domain_words)
+                return has_headline and not has_domain
+            if current_agent_id in ["flynn", "pixel", "cato"] and _is_generic_headlines(request.message):
+                suggested_agent_id = current_agent_id
+            
             # Check if we're already talking to this agent - if so, no routing needed
             if current_agent_id == suggested_agent_id:
                 # Same agent, just continue the conversation
@@ -775,7 +788,16 @@ Respond ONLY with a JSON object in this exact format:
             message_lower = request.message.lower()
             suggested_agent_id = "polly"
             
-            if any(word in message_lower for word in ["sport", "game", "team", "player", "score", "football", "basketball", "soccer", "nba", "nfl", "baseball"]):
+            # Stick with current specialist on generic "headlines"
+            generic_headlines = any(w in message_lower for w in ["headline", "headlines", "top news", "top stories", "news today", "today's news"])
+            domain_present = any(word in message_lower for word in [
+                "sport", "game", "team", "player", "score", "football", "basketball", "soccer", "nba", "nfl", "baseball",
+                "tech", "technology", "ai", "software", "app", "digital", "computer", "code", "programming", "gadget", "device",
+                "politic", "election", "government", "policy", "vote", "civic", "senate", "congress", "president", "democrat", "republican"
+            ])
+            if current_agent_id in ["flynn", "pixel", "cato"] and generic_headlines and not domain_present:
+                suggested_agent_id = current_agent_id
+            elif any(word in message_lower for word in ["sport", "game", "team", "player", "score", "football", "basketball", "soccer", "nba", "nfl", "baseball"]):
                 suggested_agent_id = "flynn"
             elif any(word in message_lower for word in ["tech", "technology", "ai", "software", "app", "digital", "computer", "code", "programming", "gadget", "device"]):
                 suggested_agent_id = "pixel"
@@ -811,7 +833,16 @@ Respond ONLY with a JSON object in this exact format:
         message_lower = request.message.lower()
         suggested_agent_id = "polly"
         
-        if any(word in message_lower for word in ["sport", "game", "team", "player", "score", "football", "basketball", "soccer", "nba", "nfl", "baseball"]):
+        # Stick with current specialist on generic "headlines"
+        generic_headlines = any(w in message_lower for w in ["headline", "headlines", "top news", "top stories", "news today", "today's news"])
+        domain_present = any(word in message_lower for word in [
+            "sport", "game", "team", "player", "score", "football", "basketball", "soccer", "nba", "nfl", "baseball",
+            "tech", "technology", "ai", "software", "app", "digital", "computer", "code", "programming", "gadget", "device",
+            "politic", "election", "government", "policy", "vote", "civic", "senate", "congress", "president", "democrat", "republican"
+        ])
+        if current_agent_id in ["flynn", "pixel", "cato"] and generic_headlines and not domain_present:
+            suggested_agent_id = current_agent_id
+        elif any(word in message_lower for word in ["sport", "game", "team", "player", "score", "football", "basketball", "soccer", "nba", "nfl", "baseball"]):
             suggested_agent_id = "flynn"
         elif any(word in message_lower for word in ["tech", "technology", "ai", "software", "app", "digital", "computer", "code", "programming", "gadget", "device"]):
             suggested_agent_id = "pixel"
@@ -955,7 +986,7 @@ async def chat_with_routing(request: ChatRequest):
         agent_display_name = agent.name
         if target_agent_id == "polly" and request.parrot_name:
             agent_display_name = f"{request.parrot_name} the Parrot"
-
+        
         # Optional: detect top-headlines requests and attach structured articles with tags
         def _is_headlines_request(msg: str) -> bool:
             ml = (msg or "").lower()
@@ -966,12 +997,21 @@ async def chat_with_routing(request: ChatRequest):
         if _is_headlines_request(request.message):
             try:
                 from .news_helper import fetch_top_headlines_structured
-                items = fetch_top_headlines_structured(country="us", page_size=6, min_items=5, max_pages=3)
+                # Tailor headlines by agent
+                kwargs: Dict[str, Any] = {"country": "us", "page_size": 6, "min_items": 5, "max_pages": 3}
+                if target_agent_id == "flynn":
+                    kwargs["category"] = "sports"
+                elif target_agent_id == "pixel":
+                    kwargs["category"] = "technology"
+                elif target_agent_id == "cato":
+                    kwargs["q"] = "politics OR election OR policy OR government"
+                items = fetch_top_headlines_structured(**kwargs)
                 if items:
                     structured_articles = []
                     # Try to classify tags using the classifier agent; be resilient if it fails
                     for it in items:
                         tags = []
+                        clean_headline = None
                         try:
                             # Build a concise classification prompt
                             classify_text = f"""Classify this news item and return JSON only.
@@ -986,6 +1026,7 @@ URL: {it.get('url') or ''}"""
                             m = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
                             data = json.loads(m.group()) if m else {}
                             # Derive simple tags from fields
+                            clean_headline = (data.get("clean_headline") or "").strip()
                             t_domain = (data.get("topic_domain") or "").strip().lower()
                             t_type = (data.get("type") or "").strip().lower()
                             lean = (data.get("political_lean") or "").strip().lower()
@@ -1007,7 +1048,7 @@ URL: {it.get('url') or ''}"""
                         except Exception:
                             tags = []
                         structured_articles.append({
-                            "headline": it.get("headline"),
+                            "headline": clean_headline or it.get("headline"),
                             "url": it.get("url"),
                             "source_name": it.get("source_name"),
                             "tags": tags or None,
@@ -1018,7 +1059,14 @@ URL: {it.get('url') or ''}"""
         # For headlines requests, suppress numbered list text and only show cards (keep a short header)
         final_text = result.get("text", "")
         if _is_headlines_request(request.message):
-            final_text = "Here are today's top headlines:"
+            if target_agent_id == "flynn":
+                final_text = "Here are today's top sports headlines:"
+            elif target_agent_id == "pixel":
+                final_text = "Here are today's top technology headlines:"
+            elif target_agent_id == "cato":
+                final_text = "Here are today's top politics headlines:"
+            else:
+                final_text = "Here are today's top headlines:"
 
         return ChatResponse(
             agent=agent_display_name,

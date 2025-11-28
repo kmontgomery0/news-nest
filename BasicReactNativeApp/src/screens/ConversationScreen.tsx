@@ -354,6 +354,23 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     setMessages(prev => [...prev, message]);
   }, []);
 
+  const getAgentIdForCurrent = (): string => {
+    try {
+      const name = (currentAgent || '').trim();
+      if (!name) return 'polly';
+      const match = BIRDS.find(b => (b.agentName || b.name) === name);
+      if (match?.id) return match.id;
+      const lower = name.toLowerCase();
+      if (lower.includes('polly') || lower.includes('parrot')) return 'polly';
+      if (lower.includes('flynn') || lower.includes('falcon')) return 'flynn';
+      if (lower.includes('pixel') || lower.includes('pigeon')) return 'pixel';
+      if (lower.includes('cato') || lower.includes('crane')) return 'cato';
+      return 'polly';
+    } catch {
+      return 'polly';
+    }
+  };
+
   const formatArticleCardsForLog = (cards: NonNullable<Message['articleCards']>): string => {
     try {
       const lines = cards.map((c, idx) => {
@@ -565,7 +582,8 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       // Debug: log history length to verify it's being sent
       console.log(`Sending message with ${conversationHistory.length} history items, currentAgent: ${currentAgent}`);
       
-      const data = await sendMessage(message, conversationHistory, 'polly', userName, parrotName);
+      const agentIdToSend = getAgentIdForCurrent();
+      const data = await sendMessage(message, conversationHistory, agentIdToSend, userName, parrotName);
 
       // Show agent response - split into multiple message bubbles
       const agentName = data.agent || 'Agent';
