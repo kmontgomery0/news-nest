@@ -146,6 +146,66 @@ def fetch_headlines_prompt(
         return None
 
 
+def fetch_top_headlines_structured(
+    *,
+    country: Optional[str] = "us",
+    category: Optional[str] = None,
+    q: Optional[str] = None,
+    page_size: int = 5,
+    api_key: Optional[str] = None,
+    min_items: Optional[int] = None,
+    max_pages: int = 3,
+) -> Optional[List[Dict[str, Any]]]:
+    """
+    Fetch top headlines and return a minimal structured list for UI cards.
+    
+    Returns a list of items with keys: headline, url, source_name.
+    """
+    key = api_key or get_newsapi_key()
+    if not key:
+        return None
+    try:
+        items: List[Dict[str, Any]] = []
+        seen = set()
+        needed = min_items if min_items is not None else page_size
+        page = 1
+        while page <= max_pages and len(items) < needed:
+            data = fetch_top_headlines(
+                key,
+                country=country,
+                category=category,
+                q=q,
+                page_size=page_size,
+                page=page,
+            )
+            articles = data.get("articles", []) or []
+            if not articles:
+                break
+            for a in articles:
+                title = (a.get("title") or "").strip()
+                url = (a.get("url") or "").strip()
+                source_name = ((a.get("source") or {}).get("name") or "").strip()
+                if not title:
+                    continue
+                dedup = f"{title}::{source_name}"
+                if dedup in seen:
+                    continue
+                seen.add(dedup)
+                items.append({
+                    "headline": title,
+                    "url": url or None,
+                    "source_name": source_name or None,
+                })
+                if len(items) >= needed:
+                    break
+            page += 1
+        # Trim to exactly needed if we over-collected
+        if len(items) > needed:
+            items = items[:needed]
+        return items or None
+    except Exception:
+        return None
+
 def summarize_news_for_agent(
     news_data: Dict[str, Any],
     agent_name: str,

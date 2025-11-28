@@ -5,6 +5,12 @@ export interface Message {
   agentName?: string;
   isRouting?: boolean;
   hasArticleReference?: boolean;
+  articleCards?: {
+    headline: string;
+    url?: string | null;
+    sourceName?: string | null;
+    tags?: string[] | null;
+  }[];
 }
 
 export interface ChatResponse {
@@ -15,6 +21,12 @@ export interface ChatResponse {
   routed_from?: string;
   has_article_reference?: boolean;
   target_agent_name?: string;
+  articles?: {
+    headline: string;
+    url?: string | null;
+    source_name?: string | null;
+    tags?: string[] | null;
+  }[];
 }
 
 export interface ConversationHistoryItem {

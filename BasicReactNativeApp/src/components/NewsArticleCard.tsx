@@ -4,16 +4,12 @@ import {
   surface_white_color,
   text_primary_brown_color,
   text_dark_gray_color,
-  text_muted_gray_color,
-  background_cream_color,
 } from '../styles/colors';
-
-export type SourceType = 'newspaper' | 'magazine' | 'blog' | 'tv' | 'radio' | string;
 
 interface NewsArticleCardProps {
   headline: string;
   sourceName: string;
-  sourceType: SourceType;
+  tags?: string[];
   onPress?: () => void;
   style?: ViewStyle;
   articleUrl?: string;
@@ -22,7 +18,7 @@ interface NewsArticleCardProps {
 export const NewsArticleCard: React.FC<NewsArticleCardProps> = ({
   headline,
   sourceName,
-  sourceType,
+  tags,
   onPress,
   style,
   articleUrl = 'https://google.com',
@@ -49,16 +45,19 @@ export const NewsArticleCard: React.FC<NewsArticleCardProps> = ({
         onPress={handleOpenArticle}
         accessibilityRole="link"
       >
+        <Text style={styles.sourceInline}>{sourceName}</Text>
+        {': '}
         {headline}
       </Text>
-      <View style={styles.metaRow}>
-        <View style={styles.sourcePill}>
-          <Text style={styles.sourceText}>{sourceName}</Text>
+      {!!tags && tags.length > 0 ? (
+        <View style={styles.tagsRow}>
+          {tags.map((t, idx) => (
+            <View style={styles.tagPill} key={`${t}-${idx}`}>
+              <Text style={styles.tagText}>{String(t || '').trim()}</Text>
+            </View>
+          ))}
         </View>
-        <View style={styles.typePill}>
-          <Text style={styles.typeText}>{formatSourceType(sourceType)}</Text>
-        </View>
-      </View>
+      ) : null}
     </View>
   );
 
@@ -70,20 +69,6 @@ export const NewsArticleCard: React.FC<NewsArticleCardProps> = ({
     );
   }
   return content;
-};
-
-const formatSourceType = (t: SourceType): string => {
-  const v = String(t || '').trim();
-  if (!v) return 'Source';
-  const lower = v.toLowerCase();
-  switch (lower) {
-    case 'tv':
-      return 'TV';
-    case 'news':
-      return 'News';
-    default:
-      return v.charAt(0).toUpperCase() + v.slice(1);
-  }
 };
 
 const styles = StyleSheet.create({
@@ -100,37 +85,28 @@ const styles = StyleSheet.create({
     color: text_dark_gray_color,
     fontFamily: 'Patrick Hand',
   },
-  metaRow: {
-    marginTop: 12,
+  sourceInline: {
+    fontWeight: '700',
+    color: text_dark_gray_color,
+    fontFamily: 'Patrick Hand',
+  },
+  tagsRow: {
+    marginTop: 8,
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8,
   },
-  sourcePill: {
-    paddingVertical: 6,
+  tagPill: {
+    paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: text_primary_brown_color,
     backgroundColor: surface_white_color,
   },
-  sourceText: {
-    fontSize: 14,
-    color: text_primary_brown_color,
-    fontFamily: 'Patrick Hand',
-    fontWeight: '700',
-  },
-  typePill: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: text_primary_brown_color,
-    backgroundColor: background_cream_color,
-  },
-  typeText: {
-    fontSize: 14,
-    color: text_muted_gray_color,
+  tagText: {
+    fontSize: 13,
+    color: text_dark_gray_color,
     fontFamily: 'Patrick Hand',
     fontWeight: '600',
   },

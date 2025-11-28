@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import Svg, { Path, Defs, ClipPath, Rect, G } from 'react-native-svg';
 import svgPaths from '../assets/svg-xwebab38e5';
+ 
 
 type EnterScreenProps = {
   onGetStarted?: () => void;
@@ -49,6 +50,8 @@ export const EnterScreen: React.FC<EnterScreenProps> = ({ onGetStarted }) => {
           <Text style={styles.ctaText}>Let's Fly!</Text>
         </TouchableOpacity>
       </View>
+
+      
 
       {/* Bottom decorative wave */}
       <View style={styles.bottomWave} pointerEvents="none">

@@ -97,33 +97,10 @@ Respond ONLY as JSON with keys:
         if last_user_text:
             intent = self._detect_headlines_intent_and_sentiment(last_user_text, api_key)
             wants_headlines = bool(intent.get("wants_headlines", False))
+        # Do NOT inject numbered-list headlines anymore; cards will be rendered on the client.
+        # Keep Polly's verbal response minimal.
         if wants_headlines:
-            print("[PollyAgent] Detected request for headlines; attempting fetch...")
-            try:
-                news_key = get_newsapi_key()
-                if news_key:
-                    formatting_instructions = (
-                        COMMON_HEADLINES_FORMATTING + " "
-                        "then end with a friendly question about which story to explore."
-                    )
-                    result = fetch_headlines_prompt(
-                        country="us",
-                        category=None,
-                        q=None,
-                        page_size=6,
-                        header_text="Today's top headlines:",
-                        formatting_instructions=formatting_instructions,
-                        api_key=news_key,
-                        min_items=5,
-                        max_pages=3,
-                    )
-                    if result and result.get("prompt"):
-                        contents = [{"role": "user", "parts": [result["prompt"]]}] + contents
-                        print(f"[PollyAgent] Injected {result.get('count', 0)} headlines into response context.")
-                else:
-                    print("[PollyAgent] NEWSAPI_KEY missing; cannot fetch headlines.")
-            except Exception:
-                print("[PollyAgent] Exception while fetching headlines; continuing without injection.", flush=True)
+            print("[PollyAgent] Detected request for headlines; skipping numbered-list injection (cards will be used).")
         return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
     
     def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
@@ -608,9 +585,59 @@ Respond ONLY as JSON with keys:
         """
 
 
+# News classification / bias detection agent
+class NewsClassifierAgent(BaseAgent):
+    """News Classifier - Identifies outlet type and likely lean/bias."""
+    
+    def __init__(self):
+        super().__init__("News Classifier")
+    
+    def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
+        return """
+            You are a careful, neutral news classifier. Your job is to:
+            • Identify what type of news source or article this is (e.g., mainstream, local, opinion, wire service, blog, sports-only, tech-only).
+            • Assess likely political/issue lean if applicable (e.g., left, center-left, center, center-right, right, far-right). If not applicable (e.g., sports-only), say "not-applicable".
+            • Detect presence of common bias signals (loaded language, cherry-picking, ad-hominem, sensationalism, unverified claims, selection bias). Explain briefly if observed.
+            • Note domain/topic (e.g., politics, sports, technology, entertainment) and whether it is opinion vs straight news.
+            • Provide a short justification and note uncertainty when evidence is limited.
+
+            IMPORTANT:
+            • Be evidence-based and cautious. If you are not sure, state uncertainty clearly.
+            • Avoid partisan language. Do not label people or groups; evaluate content characteristics only.
+            • If only a domain (e.g., "espn.com") is provided without content, classify source-level traits with high uncertainty.
+            • If an article title/summary/content is provided, base classification primarily on that content.
+            • Keep responses concise and structured.
+
+            OUTPUT FORMAT (ALWAYS return valid JSON only; no extra text):
+            {
+              "source_name": string|null,
+              "source_domain": string|null,
+              "content_title": string|null,
+              "type": "mainstream"|"local"|"wire"|"blog"|"opinion"|"analysis"|"tabloid"|"aggregator"|"academic"|"sports-only"|"tech-only"|"other",
+              "topic_domain": "politics"|"civics"|"world"|"business"|"tech"|"science"|"health"|"sports"|"entertainment"|"lifestyle"|"other",
+              "political_lean": "far-left"|"left"|"center-left"|"center"|"center-right"|"right"|"far-right"|"not-applicable"|"uncertain",
+              "is_opinion": true|false|"uncertain",
+              "bias_signals": {
+                "loaded_language": true|false,
+                "sensationalism": true|false,
+                "unverified_claims": true|false,
+                "selection_bias": true|false,
+                "ad_hominem": true|false,
+                "other_notes": string|null
+              },
+              "reliability_note": "brief string",
+              "confidence": "low"|"medium"|"high",
+              "justification": "2-4 sentences, neutral and concise"
+            }
+
+            If input is insufficient, ask a single clarifying question first, then provide your best provisional JSON with "confidence":"low" and an "uncertain" or "not-applicable" lean as appropriate.
+        """
+
+
 # Agent instances
 POLLY = PollyAgent()
 FLYNN = FlynnAgent()
 PIXEL = PixelAgent()
 CATO = CatoAgent()
+CLASSIFIER = NewsClassifierAgent()
 

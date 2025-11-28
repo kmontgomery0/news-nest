@@ -4,11 +4,12 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import re
+import json
 from datetime import datetime, timezone
 
 from .config import get_newsapi_key, get_gemini_api_key, get_env_debug
 from .newsapi_client import fetch_news
-from .agents import POLLY, FLYNN, PIXEL, CATO
+from .agents import POLLY, FLYNN, PIXEL, CATO, CLASSIFIER
 from .news_helper import get_news_context
 from .auth import router as auth_router
 from .mongo import get_users_collection, get_mongo_client, get_db, get_chat_sessions_collection
@@ -144,6 +145,8 @@ class ChatResponse(BaseModel):
     routing_message: Optional[str] = None
     routed_from: Optional[str] = None
     has_article_reference: Optional[bool] = False
+    # Optional: structured articles for UI cards
+    articles: Optional[list] = None
 
 
 # Agent mapping
@@ -952,13 +955,78 @@ async def chat_with_routing(request: ChatRequest):
         agent_display_name = agent.name
         if target_agent_id == "polly" and request.parrot_name:
             agent_display_name = f"{request.parrot_name} the Parrot"
-        
+
+        # Optional: detect top-headlines requests and attach structured articles with tags
+        def _is_headlines_request(msg: str) -> bool:
+            ml = (msg or "").lower()
+            keywords = ["headline", "headlines", "top news", "top stories", "today's news", "today news", "news today"]
+            return any(k in ml for k in keywords)
+
+        structured_articles = None
+        if _is_headlines_request(request.message):
+            try:
+                from .news_helper import fetch_top_headlines_structured
+                items = fetch_top_headlines_structured(country="us", page_size=6, min_items=5, max_pages=3)
+                if items:
+                    structured_articles = []
+                    # Try to classify tags using the classifier agent; be resilient if it fails
+                    for it in items:
+                        tags = []
+                        try:
+                            # Build a concise classification prompt
+                            classify_text = f"""Classify this news item and return JSON only.
+Source: {it.get('source_name') or 'Unknown'}
+Title: {it.get('headline') or ''}
+URL: {it.get('url') or ''}"""
+                            cls = CLASSIFIER.respond(
+                                contents=[{"role": "user", "parts": [classify_text]}],
+                                api_key=api_key
+                            )
+                            resp = cls.get("text") or ""
+                            m = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
+                            data = json.loads(m.group()) if m else {}
+                            # Derive simple tags from fields
+                            t_domain = (data.get("topic_domain") or "").strip().lower()
+                            t_type = (data.get("type") or "").strip().lower()
+                            lean = (data.get("political_lean") or "").strip().lower()
+                            is_opinion = data.get("is_opinion")
+                            if t_domain:
+                                if t_domain == "sports":
+                                    tags.append("sports news")
+                                elif t_domain != "other":
+                                    tags.append(t_domain)
+                            if t_type and t_type not in ("other",):
+                                tags.append(t_type)
+                            if is_opinion is True:
+                                tags.append("opinion-piece")
+                            if lean and lean not in ("uncertain", "not-applicable"):
+                                tags.append(lean)
+                            # De-dup and keep order
+                            seen = set()
+                            tags = [x for x in tags if not (x in seen or seen.add(x))]
+                        except Exception:
+                            tags = []
+                        structured_articles.append({
+                            "headline": it.get("headline"),
+                            "url": it.get("url"),
+                            "source_name": it.get("source_name"),
+                            "tags": tags or None,
+                        })
+            except Exception:
+                structured_articles = None
+
+        # For headlines requests, suppress numbered list text and only show cards (keep a short header)
+        final_text = result.get("text", "")
+        if _is_headlines_request(request.message):
+            final_text = "Here are today's top headlines:"
+
         return ChatResponse(
             agent=agent_display_name,
-            response=result.get("text", ""),
+            response=final_text,
             routing_message=routing_message,
             routed_from=routed_from,
             has_article_reference=has_ref,
+            articles=structured_articles,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

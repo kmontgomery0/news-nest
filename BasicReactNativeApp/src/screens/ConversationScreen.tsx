@@ -19,8 +19,9 @@ import {getInitialChunk, getNextChunk, splitIntoMessageChunks} from '../utils/me
 import {API_BASE_URL} from '../constants/api';
 import {conversationStyles} from '../styles/conversationStyles';
 import {text_primary_brown_color} from '../styles/colors';
-import {BIRD_IMAGE_MAP, BIRD_IMAGE_SHIFTS} from '../constants/birds';
+import {BIRD_IMAGE_MAP, BIRD_IMAGE_SHIFTS, BIRDS} from '../constants/birds';
 import {Sidebar} from '../components/Sidebar';
+import {NewsArticleCard} from '../components';
 
 interface ConversationScreenProps {
   initialMessage?: Message;
@@ -82,6 +83,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   const [currentAgent, setCurrentAgent] = useState<string>(defaultAgentName);
   const [routingTo, setRoutingTo] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [sessionBirdIds, setSessionBirdIds] = useState<string[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
   const streamingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const messageQueueIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -129,8 +131,69 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         const { getChatSession } = await import('../services/api');
         const data = await getChatSession(email, sessionId);
         const history = Array.isArray(data?.messages) ? data.messages : [];
+        // Persist birds involved in this session for header display
+        if (Array.isArray((data as any)?.birds)) {
+          const uniq = Array.from(new Set((data as any).birds as string[]));
+          setSessionBirdIds(uniq);
+        } else {
+          setSessionBirdIds([]);
+        }
         const loaded: Message[] = [];
         let lastAgentNameLocal: string | undefined = undefined;
+        // Helper to parse a saved [ARTICLES] block back into cards
+        const parseSavedArticlesBlock = (input: string): { cleaned: string; cards: NonNullable<Message['articleCards']> } => {
+          try {
+            if (!input) return { cleaned: input, cards: [] };
+            const ARTICLES_HEADER = '[ARTICLES]';
+            const idx = input.indexOf(ARTICLES_HEADER);
+            if (idx === -1) return { cleaned: input, cards: [] };
+            const before = input.substring(0, idx).trimEnd();
+            const after = input.substring(idx + ARTICLES_HEADER.length);
+            // Split lines after header
+            const lines = after.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            const cards: NonNullable<Message['articleCards']> = [];
+            for (let line of lines) {
+              // Expected pattern:
+              // "1. Headline — Source [tags: a, b] (url)"
+              // Make it robust to missing parts
+              const numPrefixMatch = line.match(/^\d+\.\s*(.*)$/);
+              const content = numPrefixMatch ? numPrefixMatch[1] : line;
+              // Extract URL in parentheses at end
+              let url: string | undefined;
+              const urlMatch = content.match(/\((https?:\/\/[^)]+)\)\s*$/i);
+              if (urlMatch) {
+                url = urlMatch[1].trim();
+              }
+              const contentNoUrl = urlMatch ? content.replace(urlMatch[0], '').trim() : content;
+              // Extract tags block [tags: ...]
+              let tags: string[] | undefined;
+              const tagsMatch = contentNoUrl.match(/\[tags:\s*([^\]]+)\]\s*$/i);
+              if (tagsMatch) {
+                tags = tagsMatch[1].split(',').map(t => t.trim()).filter(Boolean);
+              }
+              const contentNoTags = tagsMatch ? contentNoUrl.replace(tagsMatch[0], '').trim() : contentNoUrl;
+              // Split headline and source on em dash/— if present
+              let headline = contentNoTags;
+              let sourceName: string | undefined;
+              const dashIdx = contentNoTags.indexOf('—');
+              if (dashIdx !== -1) {
+                headline = contentNoTags.substring(0, dashIdx).trim();
+                sourceName = contentNoTags.substring(dashIdx + 1).trim();
+              }
+              if (headline) {
+                cards.push({
+                  headline,
+                  sourceName: sourceName || undefined,
+                  url: url || undefined,
+                  tags: tags && tags.length > 0 ? tags : undefined,
+                });
+              }
+            }
+            return { cleaned: before, cards };
+          } catch {
+            return { cleaned: input, cards: [] };
+          }
+        };
         history.forEach((h, idx) => {
           const text = Array.isArray(h.parts) ? h.parts.map(p => String(p)).join(' ') : '';
           if (h.role === 'user') {
@@ -143,13 +206,16 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
             // extract agent name from metadata [Agent: Name]
             const match = text.match(/\[Agent:\s*([^\]]+)\]\s*$/i);
             const agentName = match ? match[1].trim() : undefined;
-            const cleaned = text.replace(/\s*\[Agent:\s*[^\]]+\]\s*$/i, '').trim();
+            const cleanedPre = text.replace(/\s*\[Agent:\s*[^\]]+\]\s*$/i, '').trim();
+            const parsed = parseSavedArticlesBlock(cleanedPre);
+            const cleaned = parsed.cleaned.trim();
             if (agentName) lastAgentNameLocal = agentName;
             loaded.push({
               id: `agent-${idx}-${Date.now()}`,
               type: 'agent',
               text: cleaned,
               agentName: agentName || lastAgentNameLocal || defaultAgentName,
+              articleCards: parsed.cards && parsed.cards.length > 0 ? parsed.cards : undefined,
             });
           }
         });
@@ -288,6 +354,21 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     setMessages(prev => [...prev, message]);
   }, []);
 
+  const formatArticleCardsForLog = (cards: NonNullable<Message['articleCards']>): string => {
+    try {
+      const lines = cards.map((c, idx) => {
+        const n = idx + 1;
+        const source = c.sourceName ? ` — ${c.sourceName}` : '';
+        const tags = Array.isArray(c.tags) && c.tags.length > 0 ? ` [tags: ${c.tags.join(', ')}]` : '';
+        const url = c.url ? ` (${c.url})` : '';
+        return `${n}. ${c.headline}${source}${tags}${url}`;
+      });
+      return ['[ARTICLES]', ...lines].join('\n');
+    } catch {
+      return '';
+    }
+  };
+
   // Progressive message queue revelation (for multiple message bubbles)
   useEffect(() => {
     if (pendingMessages.length === 0) {
@@ -412,7 +493,15 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           lastAgentName = msg.agentName;
         }
         // Collect agent response chunks (they may be split into multiple messages)
-        currentAgentResponse.push(msg.text);
+        let textToStore = msg.text;
+        // Append a compact, textual representation of any article cards for logging/history
+        if (Array.isArray(msg.articleCards) && msg.articleCards.length > 0) {
+          const cardsBlock = formatArticleCardsForLog(msg.articleCards);
+          if (cardsBlock) {
+            textToStore = textToStore ? `${textToStore}\n\n${cardsBlock}` : cardsBlock;
+          }
+        }
+        currentAgentResponse.push(textToStore);
       }
     }
     
@@ -524,6 +613,14 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           text: chunk,
             agentName: index === 0 ? agentName : agentName, // Keep agent name for all chunks
             hasArticleReference: data.has_article_reference && index === 0, // Only show on first chunk
+            articleCards: index === 0 && Array.isArray(data.articles)
+              ? data.articles.map(a => ({
+                  headline: a.headline,
+                  url: a.url || undefined,
+                  sourceName: a.source_name || undefined,
+                  tags: a.tags || undefined,
+                }))
+              : undefined,
         }));
         
         // Add first message immediately, queue the rest
@@ -539,6 +636,14 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           text: chunks[0],
           agentName: agentName,
             hasArticleReference: data.has_article_reference,
+            articleCards: Array.isArray(data.articles)
+              ? data.articles.map(a => ({
+                  headline: a.headline,
+                  url: a.url || undefined,
+                  sourceName: a.source_name || undefined,
+                  tags: a.tags || undefined,
+                }))
+              : undefined,
         });
       }
         
@@ -636,6 +741,27 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           </TouchableOpacity>
         </View>
       </View>
+      {sessionBirdIds.length > 0 && (
+        <View style={conversationStyles.avatarRow}>
+          {sessionBirdIds.map(birdId => {
+            const bird = BIRDS.find(b => b.id === birdId);
+            if (!bird) return null;
+            const shift = BIRD_IMAGE_SHIFTS[bird.agentName || bird.name] || {left: 5, top: 2};
+            return (
+              <View key={birdId} style={conversationStyles.avatar}>
+                <Image
+                  source={bird.image}
+                  resizeMode="cover"
+                  style={[
+                    conversationStyles.avatarImage,
+                    {left: shift.left, top: shift.top},
+                  ]}
+                />
+              </View>
+            );
+          })}
+        </View>
+      )}
       
       {/* Content Area */}
       <KeyboardAvoidingView
@@ -697,6 +823,20 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
                       <Text style={conversationStyles.streamingCursor}>▋</Text>
                     )}
                   </Text>
+                  {Array.isArray(message.articleCards) && message.articleCards.length > 0 && (
+                    <View style={{marginTop: 8, gap: 12}}>
+                      {message.articleCards.map((a, idx) => (
+                        <NewsArticleCard
+                          key={`${message.id}-card-${idx}`}
+                          headline={a.headline}
+                          sourceName={a.sourceName || 'Unknown'}
+                          tags={a.tags || undefined}
+                          articleUrl={a.url || undefined}
+                          style={{}}
+                        />
+                      ))}
+                    </View>
+                  )}
                   {message.hasArticleReference && (
                     <View style={conversationStyles.articleTab}>
                       <View style={conversationStyles.articleTabIndicator} />
