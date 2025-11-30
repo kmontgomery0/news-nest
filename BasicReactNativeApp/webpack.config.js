@@ -11,6 +11,7 @@ module.exports = {
     path: path.resolve(__dirname, 'web/dist'),
     filename: 'bundle.js',
     publicPath: '/',
+    chunkFilename: 'chunks/[name].[contenthash].js',
   },
   resolve: {
     extensions: ['.web.js', '.js', '.web.ts', '.ts', '.web.tsx', '.tsx', '.json'],
@@ -106,6 +107,29 @@ module.exports = {
   devtool: isProduction ? 'source-map' : 'eval-source-map',
   optimization: {
     minimize: isProduction,
+    splitChunks: {
+      chunks: 'all',
+      cacheGroups: {
+        default: false,
+        vendors: false,
+        // Vendor chunk for node_modules
+        vendor: {
+          name: 'vendor',
+          chunks: 'all',
+          test: /node_modules/,
+          priority: 20,
+        },
+        // Common chunk for shared code
+        common: {
+          name: 'common',
+          minChunks: 2,
+          chunks: 'all',
+          priority: 10,
+          reuseExistingChunk: true,
+          enforce: true,
+        },
+      },
+    },
   },
 };
 

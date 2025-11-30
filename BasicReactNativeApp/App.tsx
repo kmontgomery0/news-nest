@@ -1,22 +1,48 @@
-import React, {useState} from 'react';
+import React, {useState, Suspense} from 'react';
 import {
   SafeAreaView,
   StatusBar,
   StyleSheet,
   View,
+  ActivityIndicator,
 } from 'react-native';
 import {Header} from './src/components/Header';
-import {ConversationScreen} from './src/screens/ConversationScreen';
-import {HomeScreen} from './src/screens/HomeScreen';
-import {SettingsScreen} from './src/screens/SettingsScreen';
-import {ChatHistoryScreen} from './src/screens/ChatHistoryScreen';
-import {EnterScreen} from './src/screens/EnterScreen';
-import {LoginScreen} from './src/screens/LoginScreen';
-import {OnboardingScreen} from './src/screens/OnboardingScreen';
-import {OnboardingScreen2} from './src/screens/OnboardingScreen2';
 import {registerUser, saveUserPreferences, getUserProfile, getUserPreferences} from './src/services/api';
 import {Bird, BIRDS} from './src/constants/birds';
 import {background_cream_color} from './src/styles/colors';
+
+// Lazy load all screen components for code splitting
+const ConversationScreen = React.lazy(() => 
+  import('./src/screens/ConversationScreen').then(module => ({ default: module.ConversationScreen }))
+);
+const HomeScreen = React.lazy(() => 
+  import('./src/screens/HomeScreen').then(module => ({ default: module.HomeScreen }))
+);
+const SettingsScreen = React.lazy(() => 
+  import('./src/screens/SettingsScreen').then(module => ({ default: module.SettingsScreen }))
+);
+const ChatHistoryScreen = React.lazy(() => 
+  import('./src/screens/ChatHistoryScreen').then(module => ({ default: module.ChatHistoryScreen }))
+);
+const EnterScreen = React.lazy(() => 
+  import('./src/screens/EnterScreen').then(module => ({ default: module.EnterScreen }))
+);
+const LoginScreen = React.lazy(() => 
+  import('./src/screens/LoginScreen').then(module => ({ default: module.LoginScreen }))
+);
+const OnboardingScreen = React.lazy(() => 
+  import('./src/screens/OnboardingScreen').then(module => ({ default: module.OnboardingScreen }))
+);
+const OnboardingScreen2 = React.lazy(() => 
+  import('./src/screens/OnboardingScreen2').then(module => ({ default: module.OnboardingScreen2 }))
+);
+
+// Loading fallback component
+const LoadingFallback = () => (
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: background_cream_color }}>
+    <ActivityIndicator size="large" color="#000" />
+  </View>
+);
 
 function App(): JSX.Element {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -95,6 +121,7 @@ function App(): JSX.Element {
       <StatusBar barStyle="dark-content" />
         <View style={styles.content}>
         <Header />
+        <Suspense fallback={<LoadingFallback />}>
         {showOnboarding ? (
           onboardingStep === 1 ? (
             <OnboardingScreen
@@ -263,6 +290,7 @@ function App(): JSX.Element {
             onNavigateToHistory={handleNavigateToChatHistory}
           />
         )}
+        </Suspense>
         </View>
     </SafeAreaView>
   );
