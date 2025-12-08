@@ -53,7 +53,17 @@ export const AllBirdsScreen: React.FC<AllBirdsScreenProps> = ({
       />
       {/* Header */}
       <View style={homeStyles.headerContainer}>
-        <View style={homeStyles.headerLeft} />
+        <View style={homeStyles.headerLeft}>
+          <TouchableOpacity
+            style={homeStyles.headerButton}
+            onPress={() => onNavigateToHome?.()}>
+            <Image
+              source={require('../assets/back.png')}
+              style={homeStyles.headerButtonImage}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+        </View>
         <Text style={homeStyles.headerTitle}>All Birds</Text>
         <View style={homeStyles.headerRight}>
           <TouchableOpacity

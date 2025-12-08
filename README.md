@@ -34,14 +34,14 @@ Option A — explicit Python 3.13 path:
 
 ```
 /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m pip install -r backend/requirements.txt
-/Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m uvicorn app.main:app --reload --factory --app-dir backend
+/Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m uvicorn app.main:app --reload --app-dir backend
 ```
 
 Option B — with alias:
 
 ```
 python3.13 -m pip install -r backend/requirements.txt
-python3.13 -m uvicorn app.main:app --reload --factory --app-dir backend
+python3.13 -m uvicorn app.main:app --reload --app-dir backend
 ```
 
 Option C — virtual environment:
@@ -50,7 +50,7 @@ Option C — virtual environment:
 python3.13 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r backend/requirements.txt
-python -m uvicorn app.main:app --reload --factory --app-dir backend
+python -m uvicorn app.main:app --reload --app-dir backend
 ```
 
 Option D - one line virtual environment:

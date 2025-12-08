@@ -263,5 +263,16 @@ export const conversationStyles = StyleSheet.create({
     backgroundColor: '#999999',
     borderRadius: 2,
   },
+  systemMessageContainer: {
+    alignItems: 'center',
+    marginVertical: 8,
+    paddingHorizontal: 16,
+  },
+  systemMessageText: {
+    fontSize: 12,
+    color: text_muted_gray_color,
+    fontFamily: 'Patrick Hand',
+    textAlign: 'center',
+  },
 });
 

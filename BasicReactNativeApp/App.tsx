@@ -10,6 +10,7 @@ import {Header} from './src/components/Header';
 import {registerUser, saveUserPreferences, getUserProfile, getUserPreferences} from './src/services/api';
 import {Bird, BIRDS} from './src/constants/birds';
 import {background_cream_color} from './src/styles/colors';
+import {Message} from './src/types';
 
 // Lazy load all screen components for code splitting
 const ConversationScreen = React.lazy(() => 
@@ -64,10 +65,13 @@ function App(): JSX.Element {
   const [parrotName, setParrotName] = useState('Polly');
   const [selectedBirdIds, setSelectedBirdIds] = useState<string[]>(['flynn', 'pixel', 'cato']);
   const [settingsInitialTab, setSettingsInitialTab] = useState<'profile' | 'topics' | 'notifications'>('profile');
+  const [initialMessage, setInitialMessage] = useState<Message | undefined>(undefined);
 
-  const handleSelectBird = (bird: Bird) => {
+  const handleSelectBird = (bird: Bird, message?: Message) => {
     // Starting a new chat from Home or All Birds: ensure no previous session is loaded
     setChatSessionId(null);
+    // Set initial message if provided
+    setInitialMessage(message);
     // Hide other screens so the conversation view is active
     setShowSettings(false);
     setShowChatHistory(false);
@@ -81,12 +85,14 @@ function App(): JSX.Element {
     setShowChatHistory(false);
     setShowAllBirds(false);
     setSelectedBird(null);
+    setInitialMessage(undefined);
   };
 
   const [chatSessionId, setChatSessionId] = useState<string | null>(null);
 
   const handleNavigateToChat = (sessionId?: string) => {
     setChatSessionId(sessionId || null);
+    setInitialMessage(undefined); // Clear initial message when navigating from history
     const polly = BIRDS.find(b => b.id === 'polly')!;
     // Create dynamic Polly with custom name
     const dynamicPolly = {
@@ -114,6 +120,7 @@ function App(): JSX.Element {
     setShowSettings(false);
     setShowConversation(false);
     setShowChatHistory(false);
+    setShowAllBirds(false);
     setSelectedBird(null);
     setShowEnter(false);
   };
@@ -298,6 +305,7 @@ function App(): JSX.Element {
           />
         ) : showConversation && selectedBird ? (
           <ConversationScreen
+            initialMessage={initialMessage}
             selectedBird={{
               name: selectedBird.name,
               welcomeMessage: selectedBird.welcomeMessage,

@@ -252,6 +252,19 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     }
   }, [messages, streamingMessage]);
 
+  // Auto-send initial message if provided (only once on mount)
+  const hasAutoSentRef = useRef(false);
+  useEffect(() => {
+    if (initialMessage && initialMessage.type === 'user' && !isLoading && !hasAutoSentRef.current) {
+      hasAutoSentRef.current = true;
+      // Small delay to ensure component is fully mounted
+      const timer = setTimeout(() => {
+        handleSendMessage(initialMessage.text);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, []); // Only run once on mount
+
   // Ensure "Saving..." status is visible by auto-scrolling when it appears
   useEffect(() => {
     if (isSavingHistory) {
@@ -557,21 +570,35 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     }
   };
 
-  const handleSendMessage = async () => {
-    const message = inputText.trim();
+  const handleKeyPress = (e: any) => {
+    // On web, detect Enter key press (without Shift) to submit
+    if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  const handleSendMessage = async (messageText?: string) => {
+    const message = messageText || inputText.trim();
     if (!message || isLoading) return;
+    
+    // If messageText was provided, it means this is an auto-send from initialMessage
+    // In that case, the message is already in the messages array, so we don't need to add it again
 
     // Build conversation history BEFORE adding the new user message
     // This ensures we only send previous conversation context (not including current message)
     const conversationHistory = buildConversationHistory();
 
-    // Add user message to UI immediately for better UX
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      type: 'user',
-      text: message,
-    };
-    addMessage(userMessage);
+    // Add user message to UI immediately for better UX (only if not already in messages)
+    // If messageText was provided, it's from initialMessage and already in messages
+    if (!messageText) {
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        type: 'user',
+        text: message,
+      };
+      addMessage(userMessage);
+    }
     setInputText('');
     setIsLoading(true);
     // Clear any previous routing indicator
@@ -680,9 +707,8 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         : `Failed to get response. Make sure the backend server is running at ${API_BASE_URL}`;
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
-        type: 'agent',
-        text: `Error: ${errorText}`,
-        agentName: 'System',
+        type: 'system',
+        text: errorText,
       };
       addMessage(errorMessage);
     } finally {
@@ -802,6 +828,16 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           // Skip routing messages - they're now shown as loading indicator
           if (message.isRouting) {
             return null;
+          }
+          // Render system messages (errors) as small grey text without chat bubble
+          if (message.type === 'system') {
+            return (
+              <View key={message.id} style={conversationStyles.systemMessageContainer}>
+                <Text style={conversationStyles.systemMessageText}>
+                  {message.text}
+                </Text>
+              </View>
+            );
           }
           if (message.type === 'agent') {
             // Use the agent name from the message to get bird image and shift
@@ -934,13 +970,17 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           multiline
           maxLength={500}
           editable={!isLoading}
+          onSubmitEditing={() => handleSendMessage()}
+          onKeyPress={handleKeyPress}
+          blurOnSubmit={false}
+          returnKeyType="send"
         />
         <TouchableOpacity
           style={[
             conversationStyles.sendButton,
             (isLoading || !inputText.trim()) && conversationStyles.sendButtonDisabled,
           ]}
-          onPress={handleSendMessage}
+          onPress={() => handleSendMessage()}
           disabled={isLoading || !inputText.trim()}>
           <Image
             source={require('../assets/icons8-up-100.png')}

@@ -46,7 +46,7 @@ export const OnboardingScreen2: React.FC<OnboardingScreen2Props> = ({ onNext, on
         <View style={styles.header}>
           <Text style={styles.welcome}>Welcome to the</Text>
           <View style={styles.brandWrap}>
-            <Text style={styles.brand}>NewsNest</Text>
+            <Text style={styles.brand}>News Nest</Text>
             <View style={styles.underline}>
               <Svg width="100%" height="3" viewBox="0 0 166 5" preserveAspectRatio="none" fill="none">
                 <Path d={svgPaths.pf6c5700} stroke="#82775A" strokeWidth={1.64972} />
