@@ -823,7 +823,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         style={conversationStyles.conversationBox}
         contentContainerStyle={conversationStyles.conversationContent}
         showsVerticalScrollIndicator={true}>
-        {messages.map(message => {
+        {messages.map((message, index) => {
           const isStreaming = streamingMessage?.id === message.id;
           // Skip routing messages - they're now shown as loading indicator
           if (message.isRouting) {
@@ -839,6 +839,15 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
               </View>
             );
           }
+          
+          // Determine if this is a new speaker (different from previous message)
+          const prevMessage = index > 0 ? messages[index - 1] : null;
+          const isNewSpeaker = !prevMessage || 
+            (message.type === 'agent' && prevMessage.type !== 'agent') ||
+            (message.type === 'user' && prevMessage.type !== 'user') ||
+            (message.type === 'agent' && prevMessage.type === 'agent' && 
+             (message.agentName || currentAgent) !== (prevMessage.agentName || currentAgent));
+          
           if (message.type === 'agent') {
             // Use the agent name from the message to get bird image and shift
             // This ensures each message shows the correct avatar for the agent who sent it
@@ -847,92 +856,112 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
             const imageShift = getBirdImageShift(messageAgent);
             
             return (
-              <View key={message.id} style={conversationStyles.messageRow}>
-                <View style={conversationStyles.parrotAvatar}>
-                  <Image
-                    source={birdImage}
-                    resizeMode="cover"
-                    style={[
-                      conversationStyles.avatarImage,
-                      {
-                        left: imageShift.left,
-                        top: imageShift.top,
-                      },
-                    ]}
-                  />
-                </View>
-                <View
-                  style={[
-                    conversationStyles.messageContainer,
-                    conversationStyles.agentMessageContainer,
-                  ]}>
-                  {message.agentName && (
+              <View key={message.id}>
+                {isNewSpeaker && message.agentName && (
+                  <View style={conversationStyles.speakerNameContainer}>
                     <Text style={conversationStyles.agentName}>
                       {message.isRouting ? '🔄 ' : ''}
                       {message.agentName}
                     </Text>
+                  </View>
+                )}
+                <View style={conversationStyles.messageRow}>
+                  {isNewSpeaker ? (
+                    <View style={conversationStyles.parrotAvatar}>
+                      <Image
+                        source={birdImage}
+                        resizeMode="cover"
+                        style={[
+                          conversationStyles.avatarImage,
+                          {
+                            left: imageShift.left,
+                            top: imageShift.top,
+                          },
+                        ]}
+                      />
+                    </View>
+                  ) : (
+                    <View style={{width: 46, marginRight: 10}} />
                   )}
-                  <Text
+                  <View
                     style={[
-                      conversationStyles.messageText,
-                      conversationStyles.agentMessageText,
+                      conversationStyles.messageContainer,
+                      conversationStyles.agentMessageContainer,
                     ]}>
-                    {message.text}
-                    {isStreaming && (
-                      <Text style={conversationStyles.streamingCursor}>▋</Text>
+                    <Text
+                      style={[
+                        conversationStyles.messageText,
+                        conversationStyles.agentMessageText,
+                      ]}>
+                      {message.text}
+                      {isStreaming && (
+                        <Text style={conversationStyles.streamingCursor}>▋</Text>
+                      )}
+                    </Text>
+                    {message.chart && (
+                      <Chart chartData={message.chart} />
                     )}
-                  </Text>
-                  {message.chart && (
-                    <Chart chartData={message.chart} />
-                  )}
-                  {message.timeline && (
-                    <Timeline timelineData={message.timeline} />
-                  )}
-                  {Array.isArray(message.articleCards) && message.articleCards.length > 0 && (
-                    <View style={{marginTop: 8, gap: 12}}>
-                      {message.articleCards.map((a, idx) => (
-                        <NewsArticleCard
-                          key={`${message.id}-card-${idx}`}
-                          headline={a.headline}
-                          sourceName={a.sourceName || 'Unknown'}
-                          tags={a.tags || undefined}
-                          articleUrl={a.url || undefined}
-                          style={{}}
-                        />
-                      ))}
-                    </View>
-                  )}
-                  {message.hasArticleReference && (
-                    <View style={conversationStyles.articleTab}>
-                      <View style={conversationStyles.articleTabIndicator} />
-                    </View>
-                  )}
+                    {message.timeline && (
+                      <Timeline timelineData={message.timeline} />
+                    )}
+                    {Array.isArray(message.articleCards) && message.articleCards.length > 0 && (
+                      <View style={{marginTop: 8, gap: 12}}>
+                        {message.articleCards.map((a, idx) => (
+                          <NewsArticleCard
+                            key={`${message.id}-card-${idx}`}
+                            headline={a.headline}
+                            sourceName={a.sourceName || 'Unknown'}
+                            tags={a.tags || undefined}
+                            articleUrl={a.url || undefined}
+                            style={{}}
+                          />
+                        ))}
+                      </View>
+                    )}
+                    {message.hasArticleReference && (
+                      <View style={conversationStyles.articleTab}>
+                        <View style={conversationStyles.articleTabIndicator} />
+                      </View>
+                    )}
+                  </View>
                 </View>
               </View>
             );
           }
+          
+          // User message
           return (
-            <View key={message.id} style={conversationStyles.messageRow}>
-              <View style={conversationStyles.userAvatar}>
-                <Image
-                  source={require('../assets/profilePlaceholder.png')}
-                  resizeMode="cover"
-                  style={conversationStyles.userAvatarImage}
-                />
-              </View>
-              <View
-                style={[
-                  conversationStyles.messageContainer,
-                  conversationStyles.userMessageContainer,
-                ]}>
-                <Text style={conversationStyles.userName}>You</Text>
-                <Text
+            <View key={message.id}>
+              {isNewSpeaker && (
+                <View style={conversationStyles.speakerNameContainer}>
+                  <Text style={conversationStyles.userName}>You</Text>
+                </View>
+              )}
+              <View style={conversationStyles.messageRow}>
+                {isNewSpeaker ? (
+                  <View style={conversationStyles.userAvatar}>
+                    <Image
+                      source={require('../assets/profilePlaceholder.png')}
+                      resizeMode="cover"
+                      style={conversationStyles.userAvatarImage}
+                    />
+                  </View>
+                ) : (
+                  <View style={{width: 46, marginRight: 10}} />
+                )}
+                <View
                   style={[
-                    conversationStyles.messageText,
-                    conversationStyles.userMessageText,
+                    conversationStyles.messageContainer,
+                    conversationStyles.userMessageContainer,
                   ]}>
-                  {message.text}
-                </Text>
+                  <Text
+                    style={[
+                      conversationStyles.messageText,
+                      conversationStyles.userMessageText,
+                    ]}>
+                    {message.text}
+                  </Text>
+                </View>
               </View>
             </View>
           );

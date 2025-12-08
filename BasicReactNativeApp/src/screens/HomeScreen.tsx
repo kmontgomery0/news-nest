@@ -215,7 +215,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               />
             </View>
             <Text style={homeStyles.pollyName}>{dynamicPolly.name}</Text>
-            <Text style={homeStyles.birdCategory}>{"Main Guide"}</Text>
+            <Text style={homeStyles.birdCategory}>{dynamicPolly.category}</Text>
           </TouchableOpacity>
           {/* Chat Input - Same as ConversationScreen */}
           <View style={homeStyles.chatInputContainer}>
@@ -249,7 +249,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </View>
 
         {/* Section Title */}
-        <Text style={homeStyles.sectionTitle}>Visit Your Favorite Nests:</Text>
+        <Text style={homeStyles.sectionTitle}>Chat with your favorite birds:</Text>
         <View style={homeStyles.sectionDivider} />
 
         {/* Other Birds Grid or Empty State */}

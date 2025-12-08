@@ -11,7 +11,7 @@ export const BIRDS: Bird[] = [
   {
     id: 'polly',
     name: 'Polly the Parrot',
-    category: 'General News',
+    category: 'Main Guide',
     image: require('../assets/parrot.jpeg'),
     welcomeMessage: "Hi! I'm Polly, your friendly news anchor. Ready for your daily news feed? Ask me about today's top headlines, and I'll help you stay informed!",
     agentName: 'Polly the Parrot',
@@ -19,7 +19,7 @@ export const BIRDS: Bird[] = [
   {
     id: 'flynn',
     name: 'Flynn the Falcon',
-    category: 'Sports News',
+    category: 'Sports',
     image: require('../assets/falcon.png'),
     welcomeMessage: "Hey! I'm Flynn, your sports commentator. I cover scores, highlights, and all the action from the world of sports. What game or team are you curious about?",
     agentName: 'Flynn the Falcon',
@@ -27,7 +27,7 @@ export const BIRDS: Bird[] = [
   {
     id: 'pixel',
     name: 'Pixel the Pigeon',
-    category: 'Technology News',
+    category: 'Technology',
     image: require('../assets/pigeon.png'),
     welcomeMessage: "Hey there! I'm Pixel, your tech guide. I love explaining how new gadgets, apps, and innovations work in simple terms. What tech topic interests you today?",
     agentName: 'Pixel the Pigeon',
@@ -35,7 +35,7 @@ export const BIRDS: Bird[] = [
   {
     id: 'cato',
     name: 'Cato the Crane',
-    category: 'Political News',
+    category: 'Politics & Civics',
     image: require('../assets/crane.png'),
     welcomeMessage: "Hello! I'm Cato, and I help explain political events, elections, and civic matters in a balanced, easy-to-understand way. What would you like to learn about?",
     agentName: 'Cato the Crane',
@@ -43,7 +43,7 @@ export const BIRDS: Bird[] = [
   {
     id: 'pizzazz',
     name: 'Pizzazz the Peacock',
-    category: 'Entertainment & Pop Culture News',
+    category: 'Pop Culture & Entertainment',
     image: require('../assets/peacock.png'),
     welcomeMessage: "Hi! I'm Pizzazz, your entertainment guide. I keep you updated on the latest in movies, music, TV shows, and pop culture. What's catching your interest?",
     agentName: 'Pizzazz the Peacock',
@@ -51,7 +51,7 @@ export const BIRDS: Bird[] = [
   {
     id: 'edwin',
     name: 'Edwin the Eagle',
-    category: 'Business News',
+    category: 'Business & Economy',
     image: require('../assets/eagle.png'),
     welcomeMessage: "Hello! I'm Edwin, your business news expert. I cover markets, companies, and economic trends that matter. What business topic would you like to explore?",
     agentName: 'Edwin the Eagle',
@@ -59,7 +59,7 @@ export const BIRDS: Bird[] = [
   {
     id: 'credo',
     name: 'Credo the Crow',
-    category: 'Crime & Legal News',
+    category: 'Crime & Legal',
     image: require('../assets/crow.png'),
     welcomeMessage: "Hey! I'm Credo, and I help explain legal matters and crime news in a clear, balanced way. What legal or crime-related topic interests you?",
     agentName: 'Credo the Crow',
@@ -67,7 +67,7 @@ export const BIRDS: Bird[] = [
   {
     id: 'gaia',
     name: 'Gaia the Goose',
-    category: 'Science & Environmental News',
+    category: 'Environment & Science',
     image: require('../assets/goose.png'),
     welcomeMessage: "Hi! I'm Gaia, your science and environment guide. I cover discoveries, climate news, and environmental stories. What would you like to learn about?",
     agentName: 'Gaia the Goose',
@@ -75,7 +75,7 @@ export const BIRDS: Bird[] = [
   {
     id: 'happy',
     name: 'Happy the Hummingbird',
-    category: 'Feel-Good News',
+    category: 'Uplifting Stories',
     image: require('../assets/hummingbird.png'),
     welcomeMessage: "Hi! I'm Happy, and I specialize in uplifting stories and positive news. Ready to brighten your day with some feel-good updates?",
     agentName: 'Happy the Hummingbird',

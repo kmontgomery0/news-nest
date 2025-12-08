@@ -22,7 +22,7 @@ export const conversationStyles = StyleSheet.create({
     backgroundColor: background_cream_color,
   },
   conversationContent: {
-    padding: 16,
+    padding: 8,
     paddingBottom: 20,
   },
   headerContainer: {
@@ -77,7 +77,7 @@ export const conversationStyles = StyleSheet.create({
   messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
     width: '100%',
   },
   avatar: {
@@ -145,7 +145,7 @@ export const conversationStyles = StyleSheet.create({
     top: -7,
   },
   messageContainer: {
-    marginBottom: 16,
+    marginBottom: 10,
     maxWidth: '85%',
     padding: 12,
     borderRadius: 16,
@@ -165,14 +165,18 @@ export const conversationStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: accent_indigo_light_color,
-    marginBottom: 6,
+    marginBottom: 4,
     fontFamily: 'Patrick Hand',
+  },
+  speakerNameContainer: {
+    marginLeft: 64,
+    marginBottom: 4,
   },
   userName: {
     fontSize: 14,
     fontWeight: '600',
     color: text_primary_brown_color,
-    marginBottom: 6,
+    marginBottom: 4,
     fontFamily: 'Patrick Hand',
   },
   messageText: {
