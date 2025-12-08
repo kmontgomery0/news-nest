@@ -7,9 +7,10 @@ import { loginUser } from '../services/api';
 type LoginScreenProps = {
   onSignedIn?: (email: string) => void;
   onJoinFlock?: () => void;
+  onContinueAsGuest?: () => void;
 };
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignedIn, onJoinFlock }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignedIn, onJoinFlock, onContinueAsGuest }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -101,6 +102,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignedIn, onJoinFloc
         <TouchableOpacity onPress={onJoinFlock} style={styles.joinLinkTouchable} activeOpacity={0.8}>
           <Text style={styles.joinLink}>New here? Join the flock</Text>
         </TouchableOpacity>
+
+        {/* Demo / guest mode */}
+        {onContinueAsGuest && (
+          <TouchableOpacity
+            onPress={onContinueAsGuest}
+            style={[styles.joinLinkTouchable, { marginTop: 4 }]}
+            activeOpacity={0.8}>
+            <Text style={[styles.joinLink, { textDecorationLine: 'none', fontSize: 16 }]}>
+              Just browsing? Continue without signing in
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Bottom decorative wave */}

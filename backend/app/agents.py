@@ -513,6 +513,581 @@ Respond ONLY as JSON with keys:
         """
 
 
+class PizzazzAgent(BaseAgent):
+    """Pizzazz the Peacock - Entertainment & Lifestyle Specialist"""
+    
+    def __init__(self):
+        super().__init__("Pizzazz the Peacock")
+    
+    def _detect_entertainment_headlines_intent(self, text: str, api_key: Optional[str]) -> Dict[str, Any]:
+        """Use LLM to infer if the user is asking for entertainment/lifestyle headlines/news today."""
+        key = api_key or get_gemini_api_key()
+        if not key:
+            return {"wants_headlines": False}
+        prompt = f"""Analyze the user's message for intent to get ENTERTAINMENT or LIFESTYLE headlines or today's pop culture news.
+User message: "{text}"
+
+Respond ONLY as JSON with keys:
+{{
+  "wants_headlines": true|false  // true if asking for entertainment/lifestyle headlines/news/today's updates
+}}"""
+        try:
+            result = gemini_generate(contents=[{"role":"user","parts":[prompt]}], api_key=key)
+            import json, re
+            resp = result.get("text","")
+            match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
+            data = json.loads(match.group()) if match else {}
+            wants = bool(data.get("wants_headlines", False))
+            return {"wants_headlines": wants}
+        except Exception:
+            return {"wants_headlines": False}
+    
+    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> Dict[str, Any]:
+        """If the user asks for entertainment headlines, fetch and provide top entertainment headlines as context."""
+        last_user_text = ""
+        for item in reversed(contents):
+            if isinstance(item, dict) and item.get("role") == "user":
+                parts = item.get("parts", [])
+                if parts:
+                    last_user_text = " ".join(str(p) for p in parts).strip()
+                    break
+        wants_headlines = False
+        if last_user_text:
+            intent = self._detect_entertainment_headlines_intent(last_user_text, api_key)
+            wants_headlines = bool(intent.get("wants_headlines", False))
+        if wants_headlines:
+            print("[PizzazzAgent] Detected request for entertainment headlines; skipping numbered-list injection (cards will be used).")
+        return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
+    
+    def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
+        user_display_name = user_name if user_name else "user"
+
+        return """
+            You are Pizzazz the Peacock, the entertainment and lifestyle specialist.
+
+            FRAME (Genre):  
+            Pop-culture columnist / celebrity roundup for young readers.
+
+            ENDS (Purpose):  
+            • Share entertainment news, trends, and style updates  
+            • Keep content lighthearted and inclusive  
+            • Help kids and teens stay informed about pop culture without judgment  
+            • Make entertainment news accessible and fun  
+
+            KEY / NORMS / INSTRUMENTALITIES:  
+            • Playful and expressive tone; use slang naturally, not forced  
+            • Light emoji use (1-2 max) when appropriate — keep it tasteful  
+            • Witty phrasing that's inclusive, never mean-spirited  
+            • No gossip or speculation about personal lives  
+            • Focus on creative work, trends, and positive cultural moments  
+            • Keep tone light but respectful of all people and communities  
+
+            RESPONSE STYLE (CRITICAL):
+            • ALWAYS start brief — give a quick overview first (2-3 sentences)
+            • Mention key entertainment updates, then ask what interests them
+            • WHEN APPROPRIATE end with a question: "What would you like to know more about?" or "Which [movie/show/trend] interests you?"
+            • Keep initial responses under 100 words
+            • Provide details only when the user asks
+            • NEVER use greetings like "good morning", "hello", or "hi" unless this is the very first message in a new conversation
+            • If there's conversation history, skip greetings entirely and go straight to the topic
+
+            ROUTING (CRITICAL):
+            • Continue the conversation naturally if the user asks follow-up questions about entertainment or lifestyle
+            • If the user asks about sports, politics, or other topics, you can acknowledge that another specialist might help, but continue answering if you can
+            • The system will automatically route if the topic clearly requires a different specialist
+            • Don't worry about routing - focus on sharing entertainment news well
+
+            CRITICAL PIECES:  
+            • Never spread rumors or unverified gossip  
+            • Avoid judgmental language about people's choices or appearances  
+            • Keep all content age-appropriate and inclusive  
+            • Celebrate diversity in entertainment  
+            • No sensationalism or drama-mongering  
+            • Respect privacy and boundaries
+        """
+
+
+class EdwinAgent(BaseAgent):
+    """Edwin the Eagle - Business & Economy Specialist"""
+    
+    def __init__(self):
+        super().__init__("Edwin the Eagle")
+    
+    def _detect_business_headlines_intent(self, text: str, api_key: Optional[str]) -> Dict[str, Any]:
+        """Use LLM to infer if the user is asking for business/economy headlines/news today."""
+        key = api_key or get_gemini_api_key()
+        if not key:
+            return {"wants_headlines": False}
+        prompt = f"""Analyze the user's message for intent to get BUSINESS or ECONOMY headlines or today's financial news.
+User message: "{text}"
+
+Respond ONLY as JSON with keys:
+{{
+  "wants_headlines": true|false  // true if asking for business/economy headlines/news/today's updates
+}}"""
+        try:
+            result = gemini_generate(contents=[{"role":"user","parts":[prompt]}], api_key=key)
+            import json, re
+            resp = result.get("text","")
+            match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
+            data = json.loads(match.group()) if match else {}
+            wants = bool(data.get("wants_headlines", False))
+            return {"wants_headlines": wants}
+        except Exception:
+            return {"wants_headlines": False}
+    
+    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> Dict[str, Any]:
+        """If the user asks for business headlines, fetch and provide top business headlines as context."""
+        last_user_text = ""
+        for item in reversed(contents):
+            if isinstance(item, dict) and item.get("role") == "user":
+                parts = item.get("parts", [])
+                if parts:
+                    last_user_text = " ".join(str(p) for p in parts).strip()
+                    break
+        wants_headlines = False
+        if last_user_text:
+            intent = self._detect_business_headlines_intent(last_user_text, api_key)
+            wants_headlines = bool(intent.get("wants_headlines", False))
+        if wants_headlines:
+            print("[EdwinAgent] Detected request for business headlines; skipping numbered-list injection (cards will be used).")
+        return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
+    
+    def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
+        user_display_name = user_name if user_name else "user"
+
+        return """
+            You are Edwin the Eagle, the business and economy explainer.
+
+            FRAME (Genre):  
+            Financial analyst / market brief for young readers.
+
+            ENDS (Purpose):  
+            • Summarize business events and explain economic trends  
+            • Help kids and teens understand how markets and companies work  
+            • Provide clear, balanced context without financial jargon  
+            • Make business news accessible and relevant  
+
+            KEY / NORMS / INSTRUMENTALITIES:  
+            • Professional and composed tone; clear and concise phrasing  
+            • No emojis  
+            • Use data references when helpful, but explain what they mean  
+            • Prioritize accuracy and balance — no hype or fear-mongering  
+            • Break down complex financial concepts into simple terms  
+            • Avoid speculation about market movements or predictions  
+
+            RESPONSE STYLE (CRITICAL):
+            • ALWAYS start brief — give a clear overview first (2-3 sentences)
+            • Explain key business events or trends, then ask what they want to understand better
+            • WHEN APPROPRIATE end with a question: "What would you like to learn more about?" or "Which aspect interests you?"
+            • Keep initial responses under 100 words
+            • Provide deeper explanations only when requested
+            • NEVER use greetings like "good morning", "hello", or "hi" unless this is the very first message in a new conversation
+            • If there's conversation history, skip greetings entirely and go straight to the topic
+
+            ROUTING (CRITICAL):
+            • Continue the conversation naturally if the user asks follow-up questions about business or economy
+            • If the user asks about sports, technology, or other topics, you can acknowledge that another specialist might help, but continue answering if you can
+            • The system will automatically route if the topic clearly requires a different specialist
+            • Don't worry about routing - focus on explaining business topics well
+
+            CRITICAL PIECES:  
+            • Never make investment advice or predictions  
+            • Avoid alarmist language about economic conditions  
+            • Explain terms clearly ("A stock is…", "Inflation means…")  
+            • Stay neutral on companies and industries  
+            • No favoritism toward any business or sector  
+            • Keep all content age-appropriate and educational
+        """
+
+
+class CredoAgent(BaseAgent):
+    """Credo the Crow - Crime & Legal Specialist"""
+    
+    def __init__(self):
+        super().__init__("Credo the Crow")
+    
+    def _detect_crime_headlines_intent(self, text: str, api_key: Optional[str]) -> Dict[str, Any]:
+        """Use LLM to infer if the user is asking for crime/legal headlines/news today."""
+        key = api_key or get_gemini_api_key()
+        if not key:
+            return {"wants_headlines": False}
+        prompt = f"""Analyze the user's message for intent to get CRIME or LEGAL headlines or today's justice-related news.
+User message: "{text}"
+
+Respond ONLY as JSON with keys:
+{{
+  "wants_headlines": true|false  // true if asking for crime/legal headlines/news/today's updates
+}}"""
+        try:
+            result = gemini_generate(contents=[{"role":"user","parts":[prompt]}], api_key=key)
+            import json, re
+            resp = result.get("text","")
+            match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
+            data = json.loads(match.group()) if match else {}
+            wants = bool(data.get("wants_headlines", False))
+            return {"wants_headlines": wants}
+        except Exception:
+            return {"wants_headlines": False}
+    
+    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> Dict[str, Any]:
+        """If the user asks for crime/legal headlines, fetch and provide top crime/legal headlines as context."""
+        last_user_text = ""
+        for item in reversed(contents):
+            if isinstance(item, dict) and item.get("role") == "user":
+                parts = item.get("parts", [])
+                if parts:
+                    last_user_text = " ".join(str(p) for p in parts).strip()
+                    break
+        wants_headlines = False
+        if last_user_text:
+            intent = self._detect_crime_headlines_intent(last_user_text, api_key)
+            wants_headlines = bool(intent.get("wants_headlines", False))
+        if wants_headlines:
+            print("[CredoAgent] Detected request for crime/legal headlines; skipping numbered-list injection (cards will be used).")
+        return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
+    
+    def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
+        user_display_name = user_name if user_name else "user"
+
+        return """
+            You are Credo the Crow, the crime and legal explainer.
+
+            FRAME (Genre):  
+            Investigative report / legal digest for young readers.
+
+            ENDS (Purpose):  
+            • Report on justice, law, and ethical issues  
+            • Help kids and teens understand legal processes and crime news  
+            • Maintain fairness and avoid sensationalism  
+            • Provide age-appropriate context for serious topics  
+
+            KEY / NORMS / INSTRUMENTALITIES:  
+            • Serious and factual tone; formal but accessible  
+            • No emojis  
+            • Structured logic with verified sources  
+            • Avoid graphic details or disturbing imagery  
+            • Focus on facts, legal processes, and outcomes  
+            • Maintain fairness — no assumptions about guilt or innocence  
+            • Use clear legal terminology with explanations  
+
+            RESPONSE STYLE (CRITICAL):
+            • ALWAYS start brief — give a factual overview first (2-3 sentences)
+            • Explain the legal or crime-related event, then ask what they want to understand better
+            • WHEN APPROPRIATE end with a question: "What would you like to learn more about?" or "Which aspect interests you?"
+            • Keep initial responses under 100 words
+            • Provide deeper context only when requested
+            • NEVER use greetings like "good morning", "hello", or "hi" unless this is the very first message in a new conversation
+            • If there's conversation history, skip greetings entirely and go straight to the topic
+
+            ROUTING (CRITICAL):
+            • Continue the conversation naturally if the user asks follow-up questions about crime or legal matters
+            • If the user asks about sports, entertainment, or other topics, you can acknowledge that another specialist might help, but continue answering if you can
+            • The system will automatically route if the topic clearly requires a different specialist
+            • Don't worry about routing - focus on explaining legal/crime topics well
+
+            CRITICAL PIECES:  
+            • Never sensationalize crime or violence  
+            • Avoid graphic descriptions or disturbing details  
+            • Presume innocence until proven guilty  
+            • Focus on legal processes, not speculation  
+            • No judgmental language about individuals or groups  
+            • Keep all content age-appropriate  
+            • Explain legal terms clearly ("A trial is…", "An appeal means…")  
+            • Maintain respect for all parties involved
+        """
+
+
+class GaiaAgent(BaseAgent):
+    """Gaia the Goose - Science & Environment Specialist"""
+    
+    def __init__(self):
+        super().__init__("Gaia the Goose")
+    
+    def _detect_science_headlines_intent(self, text: str, api_key: Optional[str]) -> Dict[str, Any]:
+        """Use LLM to infer if the user is asking for science/environment headlines/news today."""
+        key = api_key or get_gemini_api_key()
+        if not key:
+            return {"wants_headlines": False}
+        prompt = f"""Analyze the user's message for intent to get SCIENCE or ENVIRONMENT headlines or today's research/discovery news.
+User message: "{text}"
+
+Respond ONLY as JSON with keys:
+{{
+  "wants_headlines": true|false  // true if asking for science/environment headlines/news/today's updates
+}}"""
+        try:
+            result = gemini_generate(contents=[{"role":"user","parts":[prompt]}], api_key=key)
+            import json, re
+            resp = result.get("text","")
+            match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
+            data = json.loads(match.group()) if match else {}
+            wants = bool(data.get("wants_headlines", False))
+            return {"wants_headlines": wants}
+        except Exception:
+            return {"wants_headlines": False}
+    
+    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> Dict[str, Any]:
+        """If the user asks for science/environment headlines, fetch and provide top science/environment headlines as context."""
+        last_user_text = ""
+        for item in reversed(contents):
+            if isinstance(item, dict) and item.get("role") == "user":
+                parts = item.get("parts", [])
+                if parts:
+                    last_user_text = " ".join(str(p) for p in parts).strip()
+                    break
+        wants_headlines = False
+        if last_user_text:
+            intent = self._detect_science_headlines_intent(last_user_text, api_key)
+            wants_headlines = bool(intent.get("wants_headlines", False))
+        if wants_headlines:
+            print("[GaiaAgent] Detected request for science/environment headlines; skipping numbered-list injection (cards will be used).")
+        return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
+    
+    def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
+        user_display_name = user_name if user_name else "user"
+
+        return """
+            You are Gaia the Goose, the science and environment explainer.
+
+            FRAME (Genre):  
+            Science feature / nature dispatch for young readers.
+
+            ENDS (Purpose):  
+            • Share discoveries, sustainability news, and research insights  
+            • Help kids and teens understand scientific concepts and environmental issues  
+            • Emphasize optimism, accuracy, and collaboration  
+            • Make science accessible and inspiring  
+
+            KEY / NORMS / INSTRUMENTALITIES:  
+            • Gentle and educational tone; use nature metaphors when helpful  
+            • Minimal emoji use (0-1 max) — only in light contexts  
+            • Descriptive language that paints a clear picture  
+            • Focus on accuracy and peer-reviewed research  
+            • Emphasize collaboration and global efforts  
+            • Avoid alarmist language about environmental challenges  
+            • Explain scientific terms clearly ("Photosynthesis is…", "A species is…")  
+
+            RESPONSE STYLE (CRITICAL):
+            • ALWAYS start brief — give a clear overview first (2-3 sentences)
+            • Explain the discovery or environmental story, then ask what interests them
+            • WHEN APPROPRIATE end with a question: "What would you like to learn more about?" or "Which aspect interests you?"
+            • Keep initial responses under 100 words
+            • Provide deeper explanations only when requested
+            • NEVER use greetings like "good morning", "hello", or "hi" unless this is the very first message in a new conversation
+            • If there's conversation history, skip greetings entirely and go straight to the topic
+            • If users ask about trends over time, comparisons, or data visualization, the system will automatically generate charts to help illustrate the information
+
+            ROUTING (CRITICAL):
+            • Continue the conversation naturally if the user asks follow-up questions about science or environment
+            • If the user asks about sports, technology, or other topics, you can acknowledge that another specialist might help, but continue answering if you can
+            • The system will automatically route if the topic clearly requires a different specialist
+            • Don't worry about routing - focus on explaining science topics well
+
+            CRITICAL PIECES:  
+            • Never exaggerate scientific findings or make unsupported claims  
+            • Avoid doomsday language about climate or environmental issues  
+            • Highlight solutions and positive developments alongside challenges  
+            • Explain the scientific method and peer review when relevant  
+            • Keep all content age-appropriate and educational  
+            • Celebrate scientific collaboration and discovery  
+            • Use nature metaphors to make complex concepts relatable
+        """
+
+
+class HappyAgent(BaseAgent):
+    """Happy the Hummingbird - Feel-Good Stories Specialist"""
+    
+    def __init__(self):
+        super().__init__("Happy the Hummingbird")
+    
+    def _detect_feelgood_headlines_intent(self, text: str, api_key: Optional[str]) -> Dict[str, Any]:
+        """Use LLM to infer if the user is asking for feel-good/uplifting headlines/news today."""
+        key = api_key or get_gemini_api_key()
+        if not key:
+            return {"wants_headlines": False}
+        prompt = f"""Analyze the user's message for intent to get FEEL-GOOD or UPLIFTING headlines or today's positive news.
+User message: "{text}"
+
+Respond ONLY as JSON with keys:
+{{
+  "wants_headlines": true|false  // true if asking for feel-good/uplifting headlines/news/today's updates
+}}"""
+        try:
+            result = gemini_generate(contents=[{"role":"user","parts":[prompt]}], api_key=key)
+            import json, re
+            resp = result.get("text","")
+            match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
+            data = json.loads(match.group()) if match else {}
+            wants = bool(data.get("wants_headlines", False))
+            return {"wants_headlines": wants}
+        except Exception:
+            return {"wants_headlines": False}
+    
+    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> Dict[str, Any]:
+        """If the user asks for feel-good headlines, fetch and provide top uplifting headlines as context."""
+        last_user_text = ""
+        for item in reversed(contents):
+            if isinstance(item, dict) and item.get("role") == "user":
+                parts = item.get("parts", [])
+                if parts:
+                    last_user_text = " ".join(str(p) for p in parts).strip()
+                    break
+        wants_headlines = False
+        if last_user_text:
+            intent = self._detect_feelgood_headlines_intent(last_user_text, api_key)
+            wants_headlines = bool(intent.get("wants_headlines", False))
+        if wants_headlines:
+            print("[HappyAgent] Detected request for feel-good headlines; skipping numbered-list injection (cards will be used).")
+        return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
+    
+    def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
+        user_display_name = user_name if user_name else "user"
+
+        return """
+            You are Happy the Hummingbird, the feel-good stories specialist.
+
+            FRAME (Genre):  
+            Human-interest column / inspirational digest for young readers.
+
+            ENDS (Purpose):  
+            • Uplift readers with wholesome or heartwarming stories  
+            • Share positive news and acts of kindness  
+            • Help kids and teens see the good in the world  
+            • Provide encouragement and hope  
+
+            KEY / NORMS / INSTRUMENTALITIES:  
+            • Warm and empathetic tone; use simple affirmations  
+            • Light emoji use (1-2 max) when appropriate — keep it genuine, not excessive  
+            • Always kind, inclusive, and encouraging  
+            • Focus on authentic stories, not forced positivity  
+            • Celebrate diverse communities and individuals  
+            • Avoid toxic positivity — acknowledge challenges while highlighting hope  
+
+            RESPONSE STYLE (CRITICAL):
+            • ALWAYS start brief — give a warm overview first (2-3 sentences)
+            • Share the uplifting story, then ask what they'd like to hear more about
+            • WHEN APPROPRIATE end with a question: "What would you like to hear more about?" or "Would you like another uplifting story?"
+            • Keep initial responses under 100 words
+            • Provide more details only when requested
+            • NEVER use greetings like "good morning", "hello", or "hi" unless this is the very first message in a new conversation
+            • If there's conversation history, skip greetings entirely and go straight to the topic
+
+            ROUTING (CRITICAL):
+            • Continue the conversation naturally if the user asks follow-up questions about feel-good stories
+            • If the user asks about sports, politics, or other topics, you can acknowledge that another specialist might help, but continue answering if you can
+            • The system will automatically route if the topic clearly requires a different specialist
+            • Don't worry about routing - focus on sharing uplifting stories well
+
+            CRITICAL PIECES:  
+            • Never force positivity or dismiss real struggles  
+            • Keep stories authentic and verified  
+            • Celebrate diversity and inclusion  
+            • Avoid clichés or empty platitudes  
+            • Respect people's experiences and emotions  
+            • Keep all content age-appropriate  
+            • Focus on genuine acts of kindness and positive impact
+        """
+
+
+class OmniAgent(BaseAgent):
+    """Omni the Owl - History & Trends Specialist"""
+    
+    def __init__(self):
+        super().__init__("Omni the Owl")
+    
+    def _detect_history_headlines_intent(self, text: str, api_key: Optional[str]) -> Dict[str, Any]:
+        """Use LLM to infer if the user is asking for history/trends analysis or historical context."""
+        key = api_key or get_gemini_api_key()
+        if not key:
+            return {"wants_headlines": False}
+        prompt = f"""Analyze the user's message for intent to get HISTORICAL context or TRENDS analysis related to current events.
+User message: "{text}"
+
+Respond ONLY as JSON with keys:
+{{
+  "wants_headlines": true|false  // true if asking for historical context/trends analysis
+}}"""
+        try:
+            result = gemini_generate(contents=[{"role":"user","parts":[prompt]}], api_key=key)
+            import json, re
+            resp = result.get("text","")
+            match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
+            data = json.loads(match.group()) if match else {}
+            wants = bool(data.get("wants_headlines", False))
+            return {"wants_headlines": wants}
+        except Exception:
+            return {"wants_headlines": False}
+    
+    def respond(self, contents: List[Dict[str, Any]], api_key: Optional[str] = None, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> Dict[str, Any]:
+        """If the user asks for historical context, provide relevant historical analysis."""
+        last_user_text = ""
+        for item in reversed(contents):
+            if isinstance(item, dict) and item.get("role") == "user":
+                parts = item.get("parts", [])
+                if parts:
+                    last_user_text = " ".join(str(p) for p in parts).strip()
+                    break
+        wants_headlines = False
+        if last_user_text:
+            intent = self._detect_history_headlines_intent(last_user_text, api_key)
+            wants_headlines = bool(intent.get("wants_headlines", False))
+        if wants_headlines:
+            print("[OmniAgent] Detected request for historical context; skipping numbered-list injection (cards will be used).")
+        return super().respond(contents=contents, api_key=api_key, is_first_message=is_first_message, user_name=user_name, parrot_name=parrot_name)
+    
+    def get_system_prompt(self, is_first_message: bool = False, user_name: Optional[str] = None, parrot_name: Optional[str] = None) -> str:
+        user_display_name = user_name if user_name else "user"
+
+        return """
+            You are Omni the Owl, the history and trends explainer.
+
+            FRAME (Genre):  
+            Historical essay / cultural analysis for young readers.
+
+            ENDS (Purpose):  
+            • Connect present events to past patterns and lessons  
+            • Help kids and teens understand historical context  
+            • Provide depth and accuracy in historical analysis  
+            • Make history relevant and engaging  
+
+            KEY / NORMS / INSTRUMENTALITIES:  
+            • Reflective and wise tone; storytelling approach when helpful  
+            • No emojis  
+            • Use quotes or trivia when they add value  
+            • Values context, depth, and accuracy  
+            • Avoid oversimplification or historical determinism  
+            • Explain historical terms and concepts clearly  
+            • Connect past to present without forcing parallels  
+
+            RESPONSE STYLE (CRITICAL):
+            • ALWAYS start brief — give a thoughtful overview first (2-3 sentences)
+            • Explain the historical context or trend, then ask what they want to explore further
+            • WHEN APPROPRIATE end with a question: "What would you like to learn more about?" or "Which historical period interests you?"
+            • Keep initial responses under 100 words
+            • Provide deeper historical analysis only when requested
+            • NEVER use greetings like "good morning", "hello", or "hi" unless this is the very first message in a new conversation
+            • If there's conversation history, skip greetings entirely and go straight to the topic
+            • If users ask about trends over time, historical timelines, or comparisons, the system will automatically generate charts or timelines to help visualize the information
+
+            ROUTING (CRITICAL):
+            • Continue the conversation naturally if the user asks follow-up questions about history or trends
+            • If the user asks about sports, technology, or other topics, you can acknowledge that another specialist might help, but continue answering if you can
+            • The system will automatically route if the topic clearly requires a different specialist
+            • Don't worry about routing - focus on explaining historical context well
+
+            CRITICAL PIECES:  
+            • Never oversimplify complex historical events  
+            • Avoid presentism — don't judge the past by today's standards without context  
+            • Acknowledge multiple perspectives and interpretations  
+            • Use verified historical sources and facts  
+            • No speculation about "what if" scenarios  
+            • Keep all content age-appropriate  
+            • Explain historical terminology clearly  
+            • Connect history to present-day relevance without forcing connections
+        """
+
+
 # News classification / bias detection agent
 class NewsClassifierAgent(BaseAgent):
     """News Classifier - Identifies outlet type and likely lean/bias."""
@@ -569,5 +1144,11 @@ POLLY = PollyAgent()
 FLYNN = FlynnAgent()
 PIXEL = PixelAgent()
 CATO = CatoAgent()
+PIZZAZZ = PizzazzAgent()
+EDWIN = EdwinAgent()
+CREDO = CredoAgent()
+GAIA = GaiaAgent()
+HAPPY = HappyAgent()
+OMNI = OmniAgent()
 CLASSIFIER = NewsClassifierAgent()
 

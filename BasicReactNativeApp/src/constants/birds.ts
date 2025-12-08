@@ -46,7 +46,7 @@ export const BIRDS: Bird[] = [
     category: 'Entertainment & Pop Culture News',
     image: require('../assets/peacock.png'),
     welcomeMessage: "Hi! I'm Pizzazz, your entertainment guide. I keep you updated on the latest in movies, music, TV shows, and pop culture. What's catching your interest?",
-    agentName: undefined, // Not yet implemented in backend
+    agentName: 'Pizzazz the Peacock',
   },
   {
     id: 'edwin',
@@ -54,7 +54,7 @@ export const BIRDS: Bird[] = [
     category: 'Business News',
     image: require('../assets/eagle.png'),
     welcomeMessage: "Hello! I'm Edwin, your business news expert. I cover markets, companies, and economic trends that matter. What business topic would you like to explore?",
-    agentName: undefined, // Not yet implemented in backend
+    agentName: 'Edwin the Eagle',
   },
   {
     id: 'credo',
@@ -62,7 +62,7 @@ export const BIRDS: Bird[] = [
     category: 'Crime & Legal News',
     image: require('../assets/crow.png'),
     welcomeMessage: "Hey! I'm Credo, and I help explain legal matters and crime news in a clear, balanced way. What legal or crime-related topic interests you?",
-    agentName: undefined, // Not yet implemented in backend
+    agentName: 'Credo the Crow',
   },
   {
     id: 'gaia',
@@ -70,7 +70,7 @@ export const BIRDS: Bird[] = [
     category: 'Science & Environmental News',
     image: require('../assets/goose.png'),
     welcomeMessage: "Hi! I'm Gaia, your science and environment guide. I cover discoveries, climate news, and environmental stories. What would you like to learn about?",
-    agentName: undefined, // Not yet implemented in backend
+    agentName: 'Gaia the Goose',
   },
   {
     id: 'happy',
@@ -78,7 +78,7 @@ export const BIRDS: Bird[] = [
     category: 'Feel-Good News',
     image: require('../assets/hummingbird.png'),
     welcomeMessage: "Hi! I'm Happy, and I specialize in uplifting stories and positive news. Ready to brighten your day with some feel-good updates?",
-    agentName: undefined, // Not yet implemented in backend
+    agentName: 'Happy the Hummingbird',
   },
   {
     id: 'omni',
@@ -86,7 +86,7 @@ export const BIRDS: Bird[] = [
     category: 'Historical Trends',
     image: require('../assets/owl.png'),
     welcomeMessage: "Hello! I'm Omni, and I help you understand how today's news connects to historical patterns and trends. What would you like to explore?",
-    agentName: undefined, // Not yet implemented in backend
+    agentName: 'Omni the Owl',
   },
 ];
 

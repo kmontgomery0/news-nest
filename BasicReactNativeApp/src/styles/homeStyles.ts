@@ -226,5 +226,16 @@ export const homeStyles = StyleSheet.create({
     fontFamily: 'Patrick Hand',
     fontWeight: '600',
   },
+  allBirdsLinkContainer: {
+    marginTop: 8,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  allBirdsLinkText: {
+    fontSize: 16,
+    color: text_primary_brown_color,
+    textDecorationLine: 'underline',
+    fontFamily: 'Patrick Hand',
+  },
 });
 

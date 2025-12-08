@@ -1,3 +1,31 @@
+export interface ChartDataPoint {
+  label: string;
+  value: number;
+  timestamp?: string | null;
+}
+
+export interface ChartData {
+  type: string; // "line", "bar", "pie", "area", etc.
+  title: string;
+  x_axis_label?: string | null;
+  y_axis_label?: string | null;
+  data_points: ChartDataPoint[];
+  description?: string | null;
+}
+
+export interface TimelineEvent {
+  date: string; // ISO format date string
+  title: string;
+  description?: string | null;
+  category?: string | null;
+}
+
+export interface TimelineData {
+  title: string;
+  events: TimelineEvent[];
+  description?: string | null;
+}
+
 export interface Message {
   id: string;
   type: 'user' | 'agent';
@@ -11,6 +39,8 @@ export interface Message {
     sourceName?: string | null;
     tags?: string[] | null;
   }[];
+  chart?: ChartData | null;
+  timeline?: TimelineData | null;
 }
 
 export interface ChatResponse {
@@ -27,6 +57,8 @@ export interface ChatResponse {
     source_name?: string | null;
     tags?: string[] | null;
   }[];
+  chart?: ChartData | null;
+  timeline?: TimelineData | null;
 }
 
 export interface ConversationHistoryItem {

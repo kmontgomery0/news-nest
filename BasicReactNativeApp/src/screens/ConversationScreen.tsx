@@ -21,7 +21,7 @@ import {conversationStyles} from '../styles/conversationStyles';
 import {text_primary_brown_color} from '../styles/colors';
 import {BIRD_IMAGE_MAP, BIRD_IMAGE_SHIFTS, BIRDS} from '../constants/birds';
 import {Sidebar} from '../components/Sidebar';
-import {NewsArticleCard} from '../components';
+import {NewsArticleCard, Chart, Timeline} from '../components';
 
 interface ConversationScreenProps {
   initialMessage?: Message;
@@ -639,6 +639,9 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
                   tags: a.tags || undefined,
                 }))
               : undefined,
+            // Include chart/timeline only in first chunk
+            chart: index === 0 ? data.chart || null : null,
+            timeline: index === 0 ? data.timeline || null : null,
         }));
         
         // Add first message immediately, queue the rest
@@ -662,6 +665,8 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
                   tags: a.tags || undefined,
                 }))
               : undefined,
+            chart: data.chart || null,
+            timeline: data.timeline || null,
         });
       }
         
@@ -841,6 +846,12 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
                       <Text style={conversationStyles.streamingCursor}>▋</Text>
                     )}
                   </Text>
+                  {message.chart && (
+                    <Chart chartData={message.chart} />
+                  )}
+                  {message.timeline && (
+                    <Timeline timelineData={message.timeline} />
+                  )}
                   {Array.isArray(message.articleCards) && message.articleCards.length > 0 && (
                     <View style={{marginTop: 8, gap: 12}}>
                       {message.articleCards.map((a, idx) => (

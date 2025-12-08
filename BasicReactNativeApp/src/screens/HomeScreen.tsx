@@ -18,6 +18,7 @@ interface HomeScreenProps {
   onNavigateToChat?: () => void;
   onNavigateToSettings?: (tab?: 'profile' | 'topics' | 'notifications') => void;
   onNavigateToHistory?: () => void;
+  onNavigateToAllBirds?: () => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -28,6 +29,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onNavigateToChat,
   onNavigateToSettings,
   onNavigateToHistory,
+  onNavigateToAllBirds,
 }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const polly = BIRDS.find(b => b.id === 'polly')!;
@@ -142,6 +144,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <Text style={homeStyles.emptyStateButtonText}>Go to Settings</Text>
             </TouchableOpacity>
           </View>
+        )}
+
+        {/* Link to All Birds page */}
+        {onNavigateToAllBirds && (
+          <TouchableOpacity
+            onPress={onNavigateToAllBirds}
+            activeOpacity={0.7}
+            style={homeStyles.allBirdsLinkContainer}>
+            <Text style={homeStyles.allBirdsLinkText}>See all birds</Text>
+          </TouchableOpacity>
         )}
       </ScrollView>
     </View>

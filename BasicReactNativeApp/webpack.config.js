@@ -9,7 +9,8 @@ module.exports = {
   entry: './web/index.js',
   output: {
     path: path.resolve(__dirname, 'web/dist'),
-    filename: 'bundle.js',
+    // Use per-chunk filenames to avoid conflicts when multiple chunks are emitted
+    filename: '[name].[contenthash].js',
     publicPath: '/',
     chunkFilename: 'chunks/[name].[contenthash].js',
   },

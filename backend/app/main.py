@@ -9,8 +9,9 @@ from datetime import datetime, timezone
 
 from .config import get_newsapi_key, get_gemini_api_key, get_env_debug
 from .newsapi_client import fetch_news
-from .agents import POLLY, FLYNN, PIXEL, CATO, CLASSIFIER
+from .agents import POLLY, FLYNN, PIXEL, CATO, PIZZAZZ, EDWIN, CREDO, GAIA, HAPPY, OMNI, CLASSIFIER
 from .news_helper import get_news_context
+from .chart_helper import detect_chart_or_timeline_intent, generate_chart_data, generate_timeline_data
 from .auth import router as auth_router
 from .mongo import get_users_collection, get_mongo_client, get_db, get_chat_sessions_collection
 from bson import ObjectId
@@ -138,6 +139,38 @@ class ChatRequest(BaseModel):
     parrot_name: Optional[str] = None
 
 
+class ChartDataPoint(BaseModel):
+    """A single data point for a chart."""
+    label: str
+    value: float
+    timestamp: Optional[str] = None  # For time-series data (ISO format)
+
+
+class TimelineEvent(BaseModel):
+    """A single event in a timeline."""
+    date: str  # ISO format date string
+    title: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+
+
+class ChartData(BaseModel):
+    """Structured chart data."""
+    type: str  # "line", "bar", "pie", "area", etc.
+    title: str
+    x_axis_label: Optional[str] = None
+    y_axis_label: Optional[str] = None
+    data_points: List[ChartDataPoint]
+    description: Optional[str] = None  # Context about what the chart shows
+
+
+class TimelineData(BaseModel):
+    """Structured timeline data."""
+    title: str
+    events: List[TimelineEvent]
+    description: Optional[str] = None  # Context about the timeline
+
+
 class ChatResponse(BaseModel):
     agent: str
     response: str
@@ -147,6 +180,10 @@ class ChatResponse(BaseModel):
     has_article_reference: Optional[bool] = False
     # Optional: structured articles for UI cards
     articles: Optional[list] = None
+    # Optional: chart data for visualization
+    chart: Optional[ChartData] = None
+    # Optional: timeline data for visualization
+    timeline: Optional[TimelineData] = None
 
 
 # Agent mapping
@@ -155,6 +192,12 @@ AGENTS = {
     "flynn": FLYNN,
     "pixel": PIXEL,
     "cato": CATO,
+    "pizzazz": PIZZAZZ,
+    "edwin": EDWIN,
+    "credo": CREDO,
+    "gaia": GAIA,
+    "happy": HAPPY,
+    "omni": OMNI,
 }
 
 # Map human-readable agent names to ids
@@ -167,6 +210,18 @@ AGENT_NAME_TO_ID = {
     "pixel the pigeon": "pixel",
     "cato": "cato",
     "cato the crane": "cato",
+    "pizzazz": "pizzazz",
+    "pizzazz the peacock": "pizzazz",
+    "edwin": "edwin",
+    "edwin the eagle": "edwin",
+    "credo": "credo",
+    "credo the crow": "credo",
+    "gaia": "gaia",
+    "gaia the goose": "gaia",
+    "happy": "happy",
+    "happy the hummingbird": "happy",
+    "omni": "omni",
+    "omni the owl": "omni",
 }
 
 @app.get("/agents/polly/welcome", response_model=ChatResponse)
@@ -277,6 +332,31 @@ async def chat_with_agent(request: ChatRequest):
         has_ref = result.get("has_article_reference", False)
         print(f"[chat_with_agent] Result has_article_reference={has_ref}, result keys: {list(result.keys())}")
         
+        # Check if user wants a chart or timeline visualization
+        chart_data = None
+        timeline_data = None
+        
+        # Only check for visualizations for agents that support them (Omni, Gaia, Edwin, etc.)
+        visualization_agents = ["omni", "gaia", "edwin", "pixel", "cato"]
+        if agent_name.lower() in visualization_agents:
+            viz_intent = detect_chart_or_timeline_intent(request.message, agent.name, api_key)
+            if viz_intent.get("needs_visualization"):
+                viz_type = viz_intent.get("visualization_type")
+                topic = viz_intent.get("topic", "")
+                
+                if viz_type == "chart":
+                    chart_type = viz_intent.get("chart_type", "line")
+                    chart_data_dict = generate_chart_data(topic, chart_type, news_context, api_key)
+                    if chart_data_dict:
+                        chart_data = ChartData(**chart_data_dict)
+                        print(f"[chat_with_agent] Generated {chart_type} chart: {chart_data.title}")
+                
+                elif viz_type == "timeline":
+                    timeline_data_dict = generate_timeline_data(topic, news_context, api_key)
+                    if timeline_data_dict:
+                        timeline_data = TimelineData(**timeline_data_dict)
+                        print(f"[chat_with_agent] Generated timeline: {timeline_data.title}")
+        
         # Use custom parrot name if provided and agent is Polly
         agent_display_name = agent.name
         if agent_name == "polly" and request.parrot_name:
@@ -286,6 +366,8 @@ async def chat_with_agent(request: ChatRequest):
             agent=agent_display_name,
             response=result.get("text", ""),
             has_article_reference=has_ref,
+            chart=chart_data,
+            timeline=timeline_data,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -338,12 +420,18 @@ Available agents:
 - flynn (Flynn the Falcon): Sports, games, athletics, scores, sports analysis
 - pixel (Pixel the Pigeon): Technology, gadgets, AI, software, tech innovations
 - cato (Cato the Crane): Politics, elections, government, policies, civic affairs
+- pizzazz (Pizzazz the Peacock): Entertainment, pop culture, celebrities, lifestyle, movies, music, TV shows
+- edwin (Edwin the Eagle): Business, economy, markets, companies, financial news, economic trends
+- credo (Credo the Crow): Crime, legal matters, justice, law, legal news, court cases
+- gaia (Gaia the Goose): Science, environment, climate, discoveries, research, nature, sustainability
+- happy (Happy the Hummingbird): Feel-good stories, uplifting news, positive stories, human interest, inspirational
+- omni (Omni the Owl): History, historical trends, cultural analysis, connecting past to present
 
 User message: "{request.message}"
 
 Respond ONLY with a JSON object in this exact format:
 {{
-    "suggested_agent": "agent_id (polly/flynn/pixel/cato)",
+    "suggested_agent": "agent_id (polly/flynn/pixel/cato/pizzazz/edwin/credo/gaia/happy/omni)",
     "confidence": "high/medium/low",
     "reasoning": "brief explanation why this agent is best",
     "alternative_agents": ["other_agent_id_if_relevant"]
@@ -377,6 +465,18 @@ Respond ONLY with a JSON object in this exact format:
                 suggested_agent_id = "pixel"
             elif any(word in message_lower for word in ["politic", "election", "government", "policy", "vote", "civic", "senate", "congress"]):
                 suggested_agent_id = "cato"
+            elif any(word in message_lower for word in ["entertainment", "celebrity", "movie", "music", "tv", "show", "pop culture", "celebrity", "actor", "singer"]):
+                suggested_agent_id = "pizzazz"
+            elif any(word in message_lower for word in ["business", "economy", "market", "stock", "company", "financial", "economic", "trade"]):
+                suggested_agent_id = "edwin"
+            elif any(word in message_lower for word in ["crime", "legal", "court", "law", "justice", "trial", "lawsuit", "arrest"]):
+                suggested_agent_id = "credo"
+            elif any(word in message_lower for word in ["science", "environment", "climate", "research", "discovery", "nature", "sustainability", "planet"]):
+                suggested_agent_id = "gaia"
+            elif any(word in message_lower for word in ["feel-good", "uplifting", "positive", "heartwarming", "inspirational", "good news", "kindness"]):
+                suggested_agent_id = "happy"
+            elif any(word in message_lower for word in ["history", "historical", "past", "trend", "cultural", "tradition", "ancient"]):
+                suggested_agent_id = "omni"
             
             return RouteResponse(
                 suggested_agent=suggested_agent_id,
@@ -679,6 +779,12 @@ Available agents:
 - flynn (Flynn the Falcon): Sports, games, athletics, scores, sports analysis, sports news, teams, players
 - pixel (Pixel the Pigeon): Technology, gadgets, AI, software, tech innovations, coding, digital products, tech news
 - cato (Cato the Crane): Politics, elections, government, policies, civic affairs, political news, governance
+- pizzazz (Pizzazz the Peacock): Entertainment, pop culture, celebrities, lifestyle, movies, music, TV shows, entertainment news
+- edwin (Edwin the Eagle): Business, economy, markets, companies, financial news, economic trends, stocks, trade
+- credo (Credo the Crow): Crime, legal matters, justice, law, legal news, court cases, trials, lawsuits
+- gaia (Gaia the Goose): Science, environment, climate, discoveries, research, nature, sustainability, environmental news
+- happy (Happy the Hummingbird): Feel-good stories, uplifting news, positive stories, human interest, inspirational news
+- omni (Omni the Owl): History, historical trends, cultural analysis, connecting past to present, historical context
 
 Current conversation context:
 {conversation_context if conversation_context else "This is the start of the conversation."}
@@ -690,12 +796,18 @@ IMPORTANT ROUTING RULES:
 2. If the user asks about sports (even indirectly), route to flynn
 3. If the user asks about technology/tech (even indirectly), route to pixel
 4. If the user asks about politics/government (even indirectly), route to cato
-5. If continuing the same topic with the current specialist, stay with that specialist
-6. If the topic is general news or unclear, route to polly
+5. If the user asks about entertainment/pop culture (even indirectly), route to pizzazz
+6. If the user asks about business/economy (even indirectly), route to edwin
+7. If the user asks about crime/legal matters (even indirectly), route to credo
+8. If the user asks about science/environment (even indirectly), route to gaia
+9. If the user asks for feel-good/uplifting news (even indirectly), route to happy
+10. If the user asks about history/historical context (even indirectly), route to omni
+11. If continuing the same topic with the current specialist, stay with that specialist
+12. If the topic is general news or unclear, route to polly
 
 Respond ONLY with a JSON object in this exact format:
 {{
-    "suggested_agent": "agent_id (must be one of: polly/flynn/pixel/cato)",
+    "suggested_agent": "agent_id (must be one of: polly/flynn/pixel/cato/pizzazz/edwin/credo/gaia/happy/omni)",
     "confidence": "high/medium/low",
     "reasoning": "brief one-sentence explanation",
     "needs_routing": true/false,
@@ -1068,6 +1180,31 @@ URL: {it.get('url') or ''}"""
             else:
                 final_text = "Here are today's top headlines:"
 
+        # Check if user wants a chart or timeline visualization
+        chart_data = None
+        timeline_data = None
+        
+        # Only check for visualizations for agents that support them (Omni, Gaia, Edwin, etc.)
+        visualization_agents = ["omni", "gaia", "edwin", "pixel", "cato"]
+        if target_agent_id.lower() in visualization_agents:
+            viz_intent = detect_chart_or_timeline_intent(request.message, agent.name, api_key)
+            if viz_intent.get("needs_visualization"):
+                viz_type = viz_intent.get("visualization_type")
+                topic = viz_intent.get("topic", "")
+                
+                if viz_type == "chart":
+                    chart_type = viz_intent.get("chart_type", "line")
+                    chart_data_dict = generate_chart_data(topic, chart_type, news_context, api_key)
+                    if chart_data_dict:
+                        chart_data = ChartData(**chart_data_dict)
+                        print(f"[chat_and_route] Generated {chart_type} chart: {chart_data.title}")
+                
+                elif viz_type == "timeline":
+                    timeline_data_dict = generate_timeline_data(topic, news_context, api_key)
+                    if timeline_data_dict:
+                        timeline_data = TimelineData(**timeline_data_dict)
+                        print(f"[chat_and_route] Generated timeline: {timeline_data.title}")
+
         return ChatResponse(
             agent=agent_display_name,
             response=final_text,
@@ -1075,6 +1212,8 @@ URL: {it.get('url') or ''}"""
             routed_from=routed_from,
             has_article_reference=has_ref,
             articles=structured_articles,
+            chart=chart_data,
+            timeline=timeline_data,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

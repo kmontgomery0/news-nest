@@ -36,6 +36,9 @@ const OnboardingScreen = React.lazy(() =>
 const OnboardingScreen2 = React.lazy(() => 
   import('./src/screens/OnboardingScreen2').then(module => ({ default: module.OnboardingScreen2 }))
 );
+const AllBirdsScreen = React.lazy(() => 
+  import('./src/screens/AllBirdsScreen').then(module => ({ default: module.AllBirdsScreen }))
+);
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -56,14 +59,19 @@ function App(): JSX.Element {
   const [showConversation, setShowConversation] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showChatHistory, setShowChatHistory] = useState(false);
+  const [showAllBirds, setShowAllBirds] = useState(false);
   const [userName, setUserName] = useState('Nicole');
   const [parrotName, setParrotName] = useState('Polly');
   const [selectedBirdIds, setSelectedBirdIds] = useState<string[]>(['flynn', 'pixel', 'cato']);
   const [settingsInitialTab, setSettingsInitialTab] = useState<'profile' | 'topics' | 'notifications'>('profile');
 
   const handleSelectBird = (bird: Bird) => {
-    // Starting a new chat from Home: ensure no previous session is loaded
+    // Starting a new chat from Home or All Birds: ensure no previous session is loaded
     setChatSessionId(null);
+    // Hide other screens so the conversation view is active
+    setShowSettings(false);
+    setShowChatHistory(false);
+    setShowAllBirds(false);
     setSelectedBird(bird);
     setShowConversation(true);
   };
@@ -71,6 +79,7 @@ function App(): JSX.Element {
   const handleBackToHome = () => {
     setShowConversation(false);
     setShowChatHistory(false);
+    setShowAllBirds(false);
     setSelectedBird(null);
   };
 
@@ -113,6 +122,15 @@ function App(): JSX.Element {
     setShowChatHistory(true);
     setShowSettings(false);
     setShowConversation(false);
+    setShowAllBirds(false);
+    setSelectedBird(null);
+  };
+
+  const handleNavigateToAllBirds = () => {
+    setShowAllBirds(true);
+    setShowSettings(false);
+    setShowConversation(false);
+    setShowChatHistory(false);
     setSelectedBird(null);
   };
 
@@ -236,6 +254,13 @@ function App(): JSX.Element {
               setShowOnboarding(true);
               setOnboardingStep(1);
             }}
+            onContinueAsGuest={() => {
+              // Demo mode: no email, no persisted history, but full access to chat
+              setOnboardingEmail('');
+              setUserName('Guest');
+              setIsAuthenticated(true);
+              setShowEnter(false);
+            }}
           />
         ) : showSettings ? (
           <SettingsScreen
@@ -261,6 +286,15 @@ function App(): JSX.Element {
             onNavigateToHome={handleNavigateToHome}
             onNavigateToSettings={handleNavigateToSettings}
             onNavigateToChat={handleNavigateToChat}
+          />
+        ) : showAllBirds ? (
+          <AllBirdsScreen
+            userName={userName}
+            parrotName={parrotName}
+            onSelectBird={handleSelectBird}
+            onNavigateToHome={handleNavigateToHome}
+            onNavigateToSettings={handleNavigateToSettings}
+            onNavigateToHistory={handleNavigateToChatHistory}
           />
         ) : showConversation && selectedBird ? (
           <ConversationScreen
@@ -288,6 +322,7 @@ function App(): JSX.Element {
             onNavigateToChat={handleNavigateToChat}
             onNavigateToSettings={handleNavigateToSettings}
             onNavigateToHistory={handleNavigateToChatHistory}
+            onNavigateToAllBirds={handleNavigateToAllBirds}
           />
         )}
         </Suspense>
