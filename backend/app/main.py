@@ -1206,6 +1206,10 @@ async def chat_with_routing(request: ChatRequest):
         elif "nba" in ml or "basketball" in ml:
             league = "NBA"
             sport = "Basketball"
+        elif any(k in ml for k in ["formula 1", "f1", "grand prix", "abu dhabi grand prix"]):
+            # Formula 1 is a Motorsport league (TheSportsDB id 4370)
+            league = "4370"
+            sport = "Motorsport"
         # Extend here for other leagues as needed
         if not league:
             return None
