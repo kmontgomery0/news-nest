@@ -157,9 +157,9 @@ def generate_chart_data(
     chart_type = (chart_type or "line").lower()
     if chart_type not in ["line", "bar", "pie", "area"]:
         chart_type = "line"
-
+    
     context_text = f"\n\nContext: {context}" if context else ""
-
+    
     # Simple in-memory cache to reduce duplicate Gemini calls for the same
     # topic/chart/context within a running backend process.
     cache_key = (chart_type, topic.strip(), context_text.strip())
@@ -242,7 +242,7 @@ def generate_timeline_data(
         return None
     
     context_text = f"\n\nContext: {context}" if context else ""
-
+    
     cache_key = (topic.strip(), context_text.strip())
     if cache_key in _TIMELINE_CACHE:
         return _TIMELINE_CACHE[cache_key]

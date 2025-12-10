@@ -15,6 +15,7 @@ from .news_helper import get_news_context
 from .chart_helper import detect_chart_or_timeline_intent, generate_chart_data, generate_timeline_data
 from .auth import router as auth_router
 from .mongo import get_users_collection, get_mongo_client, get_db, get_chat_sessions_collection
+from .sportsdb_client import fetch_events_day, fetch_past_league_events
 from bson import ObjectId
 
 
@@ -152,6 +153,58 @@ def debug_db():
     except Exception as exc:
         return {"connected": False, "error": str(exc)}
 
+
+class SportsTeam(BaseModel):
+    id: Optional[str] = None
+    name: str
+    shortName: Optional[str] = None
+    badgeUrl: Optional[str] = None
+
+
+class SportsGame(BaseModel):
+    id: Optional[str] = None
+    sport: Optional[str] = None
+    leagueId: Optional[str] = None
+    leagueName: Optional[str] = None
+    date: Optional[str] = None  # ISO date
+    timeLocal: Optional[str] = None
+    status: str  # 'past' | 'live' | 'upcoming'
+    venueName: Optional[str] = None
+    homeTeam: Dict[str, Any]
+    awayTeam: Dict[str, Any]
+    homeScore: Optional[int] = None
+    awayScore: Optional[int] = None
+
+
+class SportsScoreboardResponse(BaseModel):
+    date: str
+    games: List[SportsGame]
+
+
+@app.get("/sports/scoreboard", response_model=SportsScoreboardResponse)
+def get_sports_scoreboard(
+    league: str = Query(..., description="League name or ID as used by TheSportsDB (e.g., 'NBA' or '4328')"),
+    date: Optional[str] = Query(None, description="Date in YYYY-MM-DD format; defaults to today's date (UTC)."),
+    sport: Optional[str] = Query(None, description="Optional sport filter (e.g., 'Basketball')"),
+):
+    """
+    Fetch a simple scoreboard (list of games) for a given league and date from TheSportsDB.
+
+    This is a thin wrapper around the `eventsday.php` endpoint and normalizes the
+    response into `SportsGame` items for the frontend to render.
+    """
+    try:
+        if not date:
+            # Use today's date in UTC by default
+            now = datetime.now(timezone.utc)
+            date = now.date().isoformat()
+        games_raw = fetch_events_day(date_iso=date, sport=sport, league=league)
+        # Pydantic will validate/shape each dict into a SportsGame
+        return SportsScoreboardResponse(date=date, games=games_raw)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error fetching scoreboard: {str(exc)}")
+
+
 @app.get("/news")
 def get_news(
     q: Optional[str] = Query(None, description="Query string (keywords)"),
@@ -227,6 +280,33 @@ class TimelineData(BaseModel):
     description: Optional[str] = None  # Context about the timeline
 
 
+class SportsTeam(BaseModel):
+    id: Optional[str] = None
+    name: str
+    shortName: Optional[str] = None
+    badgeUrl: Optional[str] = None
+
+
+class SportsGame(BaseModel):
+    id: Optional[str] = None
+    sport: Optional[str] = None
+    leagueId: Optional[str] = None
+    leagueName: Optional[str] = None
+    date: Optional[str] = None  # ISO date
+    timeLocal: Optional[str] = None
+    status: str  # 'past' | 'live' | 'upcoming'
+    venueName: Optional[str] = None
+    homeTeam: Dict[str, Any]
+    awayTeam: Dict[str, Any]
+    homeScore: Optional[int] = None
+    awayScore: Optional[int] = None
+
+
+class SportsScoreboardResponse(BaseModel):
+    date: str
+    games: List[SportsGame]
+
+
 class ChatResponse(BaseModel):
     agent: str
     response: str
@@ -240,6 +320,8 @@ class ChatResponse(BaseModel):
     chart: Optional[ChartData] = None
     # Optional: timeline data for visualization
     timeline: Optional[TimelineData] = None
+    # Optional: sports scoreboard data (e.g., latest NFL/NBA scores)
+    scoreboard: Optional[SportsScoreboardResponse] = None
 
 
 # Agent mapping
@@ -1108,6 +1190,27 @@ async def chat_with_routing(request: ChatRequest):
     
     agent = AGENTS[target_agent_id]
     
+    def _detect_scores_request(msg: str) -> Optional[Dict[str, str]]:
+        """Heuristic detection for 'scores' style sports queries (NFL/NBA etc.)."""
+        ml = (msg or "").lower()
+        if not any(k in ml for k in ["score", "scores", "final score", "game result", "game results"]):
+            return None
+        league = None
+        sport = None
+        mode = "today"
+        if any(k in ml for k in ["latest", "most recent", "recent", "last weekend", "last week"]):
+            mode = "latest"
+        if "nfl" in ml or "football" in ml:
+            league = "NFL"
+            sport = "American Football"
+        elif "nba" in ml or "basketball" in ml:
+            league = "NBA"
+            sport = "Basketball"
+        # Extend here for other leagues as needed
+        if not league:
+            return None
+        return {"league": league, "sport": sport, "mode": mode}
+    
     try:
         # Build conversation history - include previous messages and current message
         contents = []
@@ -1163,6 +1266,46 @@ async def chat_with_routing(request: ChatRequest):
         contents.append({"role": "user", "parts": [user_message]})
         print(f"[chat_and_route] Total conversation context: {len(contents)} messages")
         
+        # Optional: fetch live/recent sports scores for sports queries (NFL/NBA etc.)
+        scoreboard: Optional[SportsScoreboardResponse] = None
+        # Only do this for the sports agent to avoid noise
+        if target_agent_id == "flynn":
+            scores_req = _detect_scores_request(request.message)
+            if scores_req:
+                try:
+                    today = datetime.now(timezone.utc).date().isoformat()
+                    mode = scores_req.get("mode", "today")
+                    if mode == "latest":
+                        print(
+                            f"[chat_and_route] Fetching latest sports scores from TheSportsDB "
+                            f"(eventspastleague) league={scores_req['league']} sport={scores_req['sport']}"
+                        )
+                        games = fetch_past_league_events(scores_req["league"])
+                    else:
+                        print(
+                            f"[chat_and_route] Fetching sports scoreboard from TheSportsDB "
+                            f"(eventsday) league={scores_req['league']} sport={scores_req['sport']} date={today}"
+                        )
+                        games = fetch_events_day(
+                            date_iso=today,
+                            sport=scores_req["sport"],
+                            league=scores_req["league"],
+                        )
+                    print(f"[chat_and_route] Sports scoreboard returned {len(games)} games (mode={mode})")
+                    if games:
+                        # If using latest mode, take the date from the events themselves
+                        sb_date = today
+                        if mode == "latest":
+                            first = games[0]
+                            if isinstance(first, dict) and first.get("date"):
+                                sb_date = str(first["date"])
+                        scoreboard = SportsScoreboardResponse(
+                            date=sb_date,
+                            games=[SportsGame(**g) for g in games],
+                        )
+                except Exception as exc:
+                    print(f"[chat_and_route] Error fetching sports scoreboard: {exc}")
+        
         # Determine if this is the first message (no conversation history)
         is_first_message = not request.conversation_history or len(request.conversation_history) == 0
         
@@ -1203,53 +1346,46 @@ async def chat_with_routing(request: ChatRequest):
                 items = fetch_top_headlines_structured(**kwargs)
                 if items:
                     structured_articles = []
-                    # Optional: classify tags using the classifier agent.
-                    # This uses one Gemini call per article and can quickly
-                    # consume quota, so it is disabled by default.
-                    enable_classifier = os.getenv("ENABLE_CLASSIFIER_TAGS", "false").lower() in (
-                        "1",
-                        "true",
-                        "yes",
-                    )
+                    # ALWAYS classify tags using the classifier agent – this is
+                    # an essential part of the experience for bias/lean literacy.
                     for it in items:
-                        tags = []
-                        clean_headline = None
-                        if enable_classifier:
-                            try:
-                                # Build a concise classification prompt
-                                classify_text = f"""Classify this news item and return JSON only.
+                        tags: list[str] = []
+                        clean_headline: Optional[str] = None
+                        try:
+                            # Build a concise classification prompt
+                            classify_text = f"""Classify this news item and return JSON only.
 Source: {it.get('source_name') or 'Unknown'}
 Title: {it.get('headline') or ''}
 URL: {it.get('url') or ''}"""
-                                cls = CLASSIFIER.respond(
-                                    contents=[{"role": "user", "parts": [classify_text]}],
-                                    api_key=api_key
-                                )
-                                resp = cls.get("text") or ""
-                                m = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
-                                data = json.loads(m.group()) if m else {}
-                                # Derive simple tags from fields
-                                clean_headline = (data.get("clean_headline") or "").strip()
-                                t_domain = (data.get("topic_domain") or "").strip().lower()
-                                t_type = (data.get("type") or "").strip().lower()
-                                lean = (data.get("political_lean") or "").strip().lower()
-                                is_opinion = data.get("is_opinion")
-                                if t_domain:
-                                    if t_domain == "sports":
-                                        tags.append("sports news")
-                                    elif t_domain != "other":
-                                        tags.append(t_domain)
-                                if t_type and t_type not in ("other",):
-                                    tags.append(t_type)
-                                if is_opinion is True:
-                                    tags.append("opinion-piece")
-                                if lean and lean not in ("uncertain", "not-applicable"):
-                                    tags.append(lean)
-                                # De-dup and keep order
-                                seen = set()
-                                tags = [x for x in tags if not (x in seen or seen.add(x))]
-                            except Exception:
-                                tags = []
+                            cls = CLASSIFIER.respond(
+                                contents=[{"role": "user", "parts": [classify_text]}],
+                                api_key=api_key
+                            )
+                            resp = cls.get("text") or ""
+                            m = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
+                            data = json.loads(m.group()) if m else {}
+                            # Derive simple tags from fields
+                            clean_headline = (data.get("clean_headline") or "").strip()
+                            t_domain = (data.get("topic_domain") or "").strip().lower()
+                            t_type = (data.get("type") or "").strip().lower()
+                            lean = (data.get("political_lean") or "").strip().lower()
+                            is_opinion = data.get("is_opinion")
+                            if t_domain:
+                                if t_domain == "sports":
+                                    tags.append("sports news")
+                                elif t_domain != "other":
+                                    tags.append(t_domain)
+                            if t_type and t_type not in ("other",):
+                                tags.append(t_type)
+                            if is_opinion is True:
+                                tags.append("opinion-piece")
+                            if lean and lean not in ("uncertain", "not-applicable"):
+                                tags.append(lean)
+                            # De-dup and keep order
+                            seen: set[str] = set()
+                            tags = [x for x in tags if not (x in seen or seen.add(x))]
+                        except Exception:
+                            tags = []
                         structured_articles.append({
                             "headline": clean_headline or it.get("headline"),
                             "url": it.get("url"),
@@ -1330,6 +1466,7 @@ URL: {it.get('url') or ''}"""
             articles=structured_articles,
             chart=chart_data,
             timeline=timeline_data,
+            scoreboard=scoreboard,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

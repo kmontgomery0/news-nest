@@ -22,7 +22,7 @@ import {conversationStyles} from '../styles/conversationStyles';
 import {text_primary_brown_color} from '../styles/colors';
 import {BIRD_IMAGE_MAP, BIRD_IMAGE_SHIFTS, BIRDS} from '../constants/birds';
 import {Sidebar} from '../components/Sidebar';
-import {NewsArticleCard, Chart, Timeline} from '../components';
+import {NewsArticleCard, Chart, Timeline, SportsScoreboard} from '../components';
 
 interface ConversationScreenProps {
   initialMessage?: Message;
@@ -675,6 +675,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
             // Include chart/timeline only in first chunk
             chart: index === 0 ? data.chart || null : null,
             timeline: index === 0 ? data.timeline || null : null,
+            scoreboard: index === 0 ? data.scoreboard || null : null,
         }));
         
         // Add first message immediately, queue the rest
@@ -700,6 +701,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
               : undefined,
             chart: data.chart || null,
             timeline: data.timeline || null,
+            scoreboard: data.scoreboard || null,
         });
       }
         
@@ -939,6 +941,14 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
                           </Text>
                         </TouchableOpacity>
                       </>
+                    )}
+                    {message.scoreboard && (
+                      <View style={{marginTop: 8}}>
+                        <SportsScoreboard
+                          title={`${message.scoreboard.date} Scores`}
+                          games={message.scoreboard.games}
+                        />
+                      </View>
                     )}
                     {Array.isArray(message.articleCards) && message.articleCards.length > 0 && (
                       <View style={{marginTop: 8, gap: 12}}>
