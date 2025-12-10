@@ -1,5 +1,5 @@
 import React from 'react';
-import {View, Text, StyleSheet, Dimensions} from 'react-native';
+import {View, Text, StyleSheet, Dimensions, ScrollView} from 'react-native';
 import {ChartData} from '../types';
 import {text_primary_brown_color, accent_indigo_light_color} from '../styles/colors';
 
@@ -19,8 +19,16 @@ export const Chart: React.FC<ChartProps> = ({chartData}) => {
     return null;
   }
 
+  // Dynamically expand width based on number of points to keep things readable.
+  // Base assumption: ~6 points for line charts, ~5 bars for bar charts without scrolling.
+  const baseVisibleCount = type === 'bar' ? 5 : 6;
+  const rawScale = data_points.length / baseVisibleCount;
+  // Clamp scale factor so charts don't get absurdly wide
+  const scaleFactor = Math.min(Math.max(1, rawScale), 2.5);
+  const contentWidth = CHART_WIDTH * scaleFactor;
+
   // Calculate chart dimensions
-  const chartAreaWidth = CHART_WIDTH - PADDING * 2;
+  const chartAreaWidth = contentWidth - PADDING * 2;
   const chartAreaHeight = CHART_HEIGHT - PADDING * 2;
 
   // Find min/max values for scaling
@@ -31,14 +39,27 @@ export const Chart: React.FC<ChartProps> = ({chartData}) => {
 
   // Render based on chart type
   const renderChart = () => {
+    let inner: JSX.Element;
+
     if (type === 'line' || type === 'area') {
-      return renderLineChart();
+      inner = renderLineChart();
     } else if (type === 'bar') {
-      return renderBarChart();
+      inner = renderBarChart();
+    } else if (type === 'pie') {
+      inner = renderPieChart();
     } else {
       // Default to line chart
-      return renderLineChart();
+      inner = renderLineChart();
     }
+    // Always use a horizontal ScrollView so long charts can be explored.
+    return (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={contentWidth > CHART_WIDTH}
+        contentContainerStyle={{paddingHorizontal: 0}}>
+        {inner}
+      </ScrollView>
+    );
   };
 
   const renderLineChart = () => {
@@ -57,9 +78,12 @@ export const Chart: React.FC<ChartProps> = ({chartData}) => {
     }
 
     return (
-      <View style={styles.chartContainer}>
-        {/* Y-axis labels */}
+      <View style={[styles.chartContainer, {width: contentWidth}]}>
+        {/* Y-axis labels and title */}
         <View style={styles.yAxisContainer}>
+          {y_axis_label && (
+            <Text style={styles.yAxisTitle}>{y_axis_label}</Text>
+          )}
           <Text style={styles.axisLabel}>{maxValue.toFixed(1)}</Text>
           <Text style={styles.axisLabel}>{((minValue + maxValue) / 2).toFixed(1)}</Text>
           <Text style={styles.axisLabel}>{minValue.toFixed(1)}</Text>
@@ -69,33 +93,41 @@ export const Chart: React.FC<ChartProps> = ({chartData}) => {
         <View style={styles.chartArea}>
           {/* Grid lines */}
           {[0, 0.5, 1].map(ratio => {
-            const y = PADDING + chartAreaHeight - (ratio * chartAreaHeight);
+            const y = PADDING + chartAreaHeight - ratio * chartAreaHeight;
             return (
               <View
                 key={ratio}
-                style={[styles.gridLine, {top: y, width: chartAreaWidth}]}
+                style={[
+                  styles.gridLine,
+                  {top: y, left: PADDING, width: chartAreaWidth},
+                ]}
               />
             );
           })}
 
-          {/* Line */}
+          {/* Line (thin, connecting each point) */}
           <View style={styles.lineContainer}>
             {points.map((point, index) => {
-              if (index === 0) return null;
+              if (index === 0) {
+                return null;
+              }
               const prevPoint = points[index - 1];
+              const dx = point.x - prevPoint.x;
+              const dy = point.y - prevPoint.y;
+              const length = Math.sqrt(dx * dx + dy * dy);
+              const angle = Math.atan2(dy, dx);
+              const midX = (prevPoint.x + point.x) / 2;
+              const midY = (prevPoint.y + point.y) / 2;
               return (
                 <View
                   key={index}
                   style={[
                     styles.lineSegment,
                     {
-                      left: prevPoint.x,
-                      top: prevPoint.y,
-                      width: point.x - prevPoint.x,
-                      height: Math.abs(point.y - prevPoint.y),
-                      transform: [
-                        {rotate: `${Math.atan2(point.y - prevPoint.y, point.x - prevPoint.x)}rad`},
-                      ],
+                      width: length,
+                      left: midX - length / 2,
+                      top: midY - 1,
+                      transform: [{rotate: `${angle}rad`}],
                     },
                   ]}
                 />
@@ -147,9 +179,12 @@ export const Chart: React.FC<ChartProps> = ({chartData}) => {
     const actualBarWidth = barWidth - barSpacing;
 
     return (
-      <View style={styles.chartContainer}>
-        {/* Y-axis labels */}
+      <View style={[styles.chartContainer, {width: contentWidth}]}>
+        {/* Y-axis labels and title */}
         <View style={styles.yAxisContainer}>
+          {y_axis_label && (
+            <Text style={styles.yAxisTitle}>{y_axis_label}</Text>
+          )}
           <Text style={styles.axisLabel}>{maxValue.toFixed(1)}</Text>
           <Text style={styles.axisLabel}>{((minValue + maxValue) / 2).toFixed(1)}</Text>
           <Text style={styles.axisLabel}>{minValue.toFixed(1)}</Text>
@@ -159,11 +194,14 @@ export const Chart: React.FC<ChartProps> = ({chartData}) => {
         <View style={styles.chartArea}>
           {/* Grid lines */}
           {[0, 0.5, 1].map(ratio => {
-            const y = PADDING + chartAreaHeight - (ratio * chartAreaHeight);
+            const y = PADDING + chartAreaHeight - ratio * chartAreaHeight;
             return (
               <View
                 key={ratio}
-                style={[styles.gridLine, {top: y, width: chartAreaWidth}]}
+                style={[
+                  styles.gridLine,
+                  {top: y, left: PADDING, width: chartAreaWidth},
+                ]}
               />
             );
           })}
@@ -187,6 +225,21 @@ export const Chart: React.FC<ChartProps> = ({chartData}) => {
                     },
                   ]}
                 />
+                {/* Value label above bar (only if not too many bars) */}
+                {data_points.length <= 10 && (
+                  <Text
+                    style={[
+                      styles.valueLabel,
+                      {
+                        left: x,
+                        bottom: PADDING + barHeight + 4,
+                        width: actualBarWidth + 8,
+                      },
+                    ]}
+                    numberOfLines={1}>
+                    {dp.value.toFixed(1)}
+                  </Text>
+                )}
                 <Text
                   style={[
                     styles.barLabel,
@@ -207,6 +260,34 @@ export const Chart: React.FC<ChartProps> = ({chartData}) => {
     );
   };
 
+  const renderPieChart = () => {
+    // Simple textual pie representation (legend style) to stay readable in small chat bubbles.
+    // Each slice is represented by a colored bar and label with percentage.
+    const total = values.reduce((sum, v) => sum + v, 0) || 1;
+    return (
+      <View style={[styles.chartContainer, {width: CHART_WIDTH}]}>
+        <View style={styles.pieLegendContainer}>
+          {data_points.map((dp, index) => {
+            const ratio = (dp.value / total) * 100;
+            return (
+              <View key={index} style={styles.pieLegendRow}>
+                <View
+                  style={[
+                    styles.pieColorSwatch,
+                    {backgroundColor: accent_indigo_light_color, opacity: 0.6 + (index % 3) * 0.1},
+                  ]}
+                />
+                <Text style={styles.pieLegendText} numberOfLines={1}>
+                  {dp.label} — {ratio.toFixed(1)}%
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
@@ -214,9 +295,6 @@ export const Chart: React.FC<ChartProps> = ({chartData}) => {
       {renderChart()}
       {x_axis_label && (
         <Text style={styles.axisTitle}>{x_axis_label}</Text>
-      )}
-      {y_axis_label && (
-        <Text style={[styles.axisTitle, styles.yAxisTitle]}>{y_axis_label}</Text>
       )}
     </View>
   );
@@ -247,12 +325,12 @@ const styles = StyleSheet.create({
   chartContainer: {
     flexDirection: 'row',
     height: CHART_HEIGHT,
-    width: CHART_WIDTH,
   },
   yAxisContainer: {
-    width: 40,
+    width: 48,
     justifyContent: 'space-between',
     paddingRight: 8,
+    alignItems: 'center',
   },
   axisLabel: {
     fontSize: 10,
@@ -289,7 +367,7 @@ const styles = StyleSheet.create({
   },
   xAxisContainer: {
     position: 'absolute',
-    bottom: -20,
+    bottom: 0,
     width: '100%',
     height: 20,
   },
@@ -326,11 +404,40 @@ const styles = StyleSheet.create({
     fontFamily: 'Patrick Hand',
   },
   yAxisTitle: {
-    transform: [{rotate: '-90deg'}],
+    fontSize: 11,
+    color: '#666',
+    marginBottom: 4,
+    textAlign: 'center',
+    fontFamily: 'Patrick Hand',
+  },
+  valueLabel: {
     position: 'absolute',
-    left: -60,
-    top: CHART_HEIGHT / 2 - 10,
-    width: 100,
+    fontSize: 9,
+    color: '#444',
+    fontFamily: 'Patrick Hand',
+    textAlign: 'center',
+  },
+  pieLegendContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  pieLegendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 2,
+  },
+  pieColorSwatch: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 6,
+  },
+  pieLegendText: {
+    fontSize: 11,
+    color: '#555',
+    fontFamily: 'Patrick Hand',
+    flexShrink: 1,
   },
 });
 

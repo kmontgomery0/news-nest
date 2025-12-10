@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import re
 import json
+import os
 from datetime import datetime, timezone
 
 from .config import get_newsapi_key, get_gemini_api_key, get_env_debug
@@ -15,6 +16,61 @@ from .chart_helper import detect_chart_or_timeline_intent, generate_chart_data, 
 from .auth import router as auth_router
 from .mongo import get_users_collection, get_mongo_client, get_db, get_chat_sessions_collection
 from bson import ObjectId
+
+
+def _clean_visualization_text(text: str) -> str:
+    """
+    Clean up LLM text when a chart or timeline visualization is attached.
+    
+    - Remove placeholder lines like "[GRAPH ... WILL BE GENERATED HERE]".
+    - Trim down to the first couple of paragraphs to avoid ascii-style chart dumps.
+    """
+    if not text:
+        return text
+
+    # If the whole thing is wrapped in a markdown code block, drop it entirely.
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        # Keep any text before the first fence, drop fenced content.
+        parts = stripped.split("```", 1)
+        pre = parts[0].strip()
+        return pre
+
+    # Drop any placeholder "[GRAPH ...]" lines and obvious JSON chart blobs,
+    # and remove outdated capability disclaimers about not being able to
+    # display charts (the frontend will handle rendering).
+    lines = []
+    for line in text.splitlines():
+        lower = line.lower().strip()
+        if "[graph" in lower:
+            continue
+        # Remove common "I can't show charts" style sentences
+        if (
+            "as an ai" in lower
+            and ("cannot display" in lower or "not able to" in lower or "can't" in lower)
+        ) or "not able to generate visual" in lower or "can't actually display" in lower:
+            continue
+        # Drop standalone JSON-looking chart configs
+        if lower.startswith("{") and lower.endswith("}"):
+            continue
+        lines.append(line)
+    cleaned = "\n".join(lines).strip()
+    if not cleaned:
+        return ""
+
+    # Remove any trailing fenced JSON/code block if present
+    if "```" in cleaned:
+        cleaned = cleaned.split("```", 1)[0].strip()
+        if not cleaned:
+            return ""
+
+    # Keep at most the first 2–3 paragraphs so we don't show raw value dumps
+    paragraphs = [p.strip() for p in cleaned.split("\n\n") if p.strip()]
+    if not paragraphs:
+        return cleaned
+    # 2 is usually enough; 3 as an upper bound for context
+    kept = "\n\n".join(paragraphs[:3])
+    return kept.strip()
 
 
 app = FastAPI(title="News Nest API", version="0.1.0")
@@ -335,6 +391,7 @@ async def chat_with_agent(request: ChatRequest):
         # Check if user wants a chart or timeline visualization
         chart_data = None
         timeline_data = None
+        visualization_note = ""
         
         # Only check for visualizations for agents that support them (Omni, Gaia, Edwin, etc.)
         visualization_agents = ["omni", "gaia", "edwin", "pixel", "cato"]
@@ -350,21 +407,47 @@ async def chat_with_agent(request: ChatRequest):
                     if chart_data_dict:
                         chart_data = ChartData(**chart_data_dict)
                         print(f"[chat_with_agent] Generated {chart_type} chart: {chart_data.title}")
+                    else:
+                        # Help build data literacy when a chart isn't actually suitable
+                        visualization_note = (
+                            "Note: A chart might seem helpful here, but we don't have clear, reliable "
+                            "numeric data to plot without making up values. When you see graphs in the news, "
+                            "it's important to check what data they are based on and whether the numbers are "
+                            "actually available."
+                        )
                 
                 elif viz_type == "timeline":
                     timeline_data_dict = generate_timeline_data(topic, news_context, api_key)
                     if timeline_data_dict:
                         timeline_data = TimelineData(**timeline_data_dict)
                         print(f"[chat_with_agent] Generated timeline: {timeline_data.title}")
+                    else:
+                        visualization_note = (
+                            "Note: For this question, a timeline of specific dated events isn't a great fit. "
+                            "Many explanations in the news are about ongoing situations rather than clear, "
+                            "timestamped milestones, so it's worth asking whether a timeline might oversimplify things."
+                        )
         
         # Use custom parrot name if provided and agent is Polly
         agent_display_name = agent.name
         if agent_name == "polly" and request.parrot_name:
             agent_display_name = f"{request.parrot_name} the Parrot"
-        
+
+        # Clean text if a visualization is attached to avoid graph placeholders
+        response_text = result.get("text", "")
+        if chart_data or timeline_data:
+            response_text = _clean_visualization_text(response_text)
+        # If we tried but couldn't generate a suitable visualization, add a short
+        # literacy note explaining why a chart/timeline may not be appropriate.
+        if visualization_note and not (chart_data or timeline_data):
+            if response_text:
+                response_text = response_text.rstrip() + "\n\n" + visualization_note
+            else:
+                response_text = visualization_note
+
         return ChatResponse(
             agent=agent_display_name,
-            response=result.get("text", ""),
+            response=response_text,
             has_article_reference=has_ref,
             chart=chart_data,
             timeline=timeline_data,
@@ -1120,45 +1203,53 @@ async def chat_with_routing(request: ChatRequest):
                 items = fetch_top_headlines_structured(**kwargs)
                 if items:
                     structured_articles = []
-                    # Try to classify tags using the classifier agent; be resilient if it fails
+                    # Optional: classify tags using the classifier agent.
+                    # This uses one Gemini call per article and can quickly
+                    # consume quota, so it is disabled by default.
+                    enable_classifier = os.getenv("ENABLE_CLASSIFIER_TAGS", "false").lower() in (
+                        "1",
+                        "true",
+                        "yes",
+                    )
                     for it in items:
                         tags = []
                         clean_headline = None
-                        try:
-                            # Build a concise classification prompt
-                            classify_text = f"""Classify this news item and return JSON only.
+                        if enable_classifier:
+                            try:
+                                # Build a concise classification prompt
+                                classify_text = f"""Classify this news item and return JSON only.
 Source: {it.get('source_name') or 'Unknown'}
 Title: {it.get('headline') or ''}
 URL: {it.get('url') or ''}"""
-                            cls = CLASSIFIER.respond(
-                                contents=[{"role": "user", "parts": [classify_text]}],
-                                api_key=api_key
-                            )
-                            resp = cls.get("text") or ""
-                            m = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
-                            data = json.loads(m.group()) if m else {}
-                            # Derive simple tags from fields
-                            clean_headline = (data.get("clean_headline") or "").strip()
-                            t_domain = (data.get("topic_domain") or "").strip().lower()
-                            t_type = (data.get("type") or "").strip().lower()
-                            lean = (data.get("political_lean") or "").strip().lower()
-                            is_opinion = data.get("is_opinion")
-                            if t_domain:
-                                if t_domain == "sports":
-                                    tags.append("sports news")
-                                elif t_domain != "other":
-                                    tags.append(t_domain)
-                            if t_type and t_type not in ("other",):
-                                tags.append(t_type)
-                            if is_opinion is True:
-                                tags.append("opinion-piece")
-                            if lean and lean not in ("uncertain", "not-applicable"):
-                                tags.append(lean)
-                            # De-dup and keep order
-                            seen = set()
-                            tags = [x for x in tags if not (x in seen or seen.add(x))]
-                        except Exception:
-                            tags = []
+                                cls = CLASSIFIER.respond(
+                                    contents=[{"role": "user", "parts": [classify_text]}],
+                                    api_key=api_key
+                                )
+                                resp = cls.get("text") or ""
+                                m = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', resp, re.DOTALL)
+                                data = json.loads(m.group()) if m else {}
+                                # Derive simple tags from fields
+                                clean_headline = (data.get("clean_headline") or "").strip()
+                                t_domain = (data.get("topic_domain") or "").strip().lower()
+                                t_type = (data.get("type") or "").strip().lower()
+                                lean = (data.get("political_lean") or "").strip().lower()
+                                is_opinion = data.get("is_opinion")
+                                if t_domain:
+                                    if t_domain == "sports":
+                                        tags.append("sports news")
+                                    elif t_domain != "other":
+                                        tags.append(t_domain)
+                                if t_type and t_type not in ("other",):
+                                    tags.append(t_type)
+                                if is_opinion is True:
+                                    tags.append("opinion-piece")
+                                if lean and lean not in ("uncertain", "not-applicable"):
+                                    tags.append(lean)
+                                # De-dup and keep order
+                                seen = set()
+                                tags = [x for x in tags if not (x in seen or seen.add(x))]
+                            except Exception:
+                                tags = []
                         structured_articles.append({
                             "headline": clean_headline or it.get("headline"),
                             "url": it.get("url"),
@@ -1183,6 +1274,7 @@ URL: {it.get('url') or ''}"""
         # Check if user wants a chart or timeline visualization
         chart_data = None
         timeline_data = None
+        visualization_note = ""
         
         # Only check for visualizations for agents that support them (Omni, Gaia, Edwin, etc.)
         visualization_agents = ["omni", "gaia", "edwin", "pixel", "cato"]
@@ -1198,12 +1290,36 @@ URL: {it.get('url') or ''}"""
                     if chart_data_dict:
                         chart_data = ChartData(**chart_data_dict)
                         print(f"[chat_and_route] Generated {chart_type} chart: {chart_data.title}")
+                    else:
+                        visualization_note = (
+                            "Note: A chart might seem helpful here, but we don't have clear, reliable "
+                            "numeric data to plot without making up values. When you see graphs in the news, "
+                            "it's important to check what data they are based on and whether the numbers are "
+                            "actually available."
+                        )
                 
                 elif viz_type == "timeline":
                     timeline_data_dict = generate_timeline_data(topic, news_context, api_key)
                     if timeline_data_dict:
                         timeline_data = TimelineData(**timeline_data_dict)
                         print(f"[chat_and_route] Generated timeline: {timeline_data.title}")
+                    else:
+                        visualization_note = (
+                            "Note: For this question, a timeline of specific dated events isn't a great fit. "
+                            "Many explanations in the news are about ongoing situations rather than clear, "
+                            "timestamped milestones, so it's worth asking whether a timeline might oversimplify things."
+                        )
+
+        # Clean text if a visualization is attached to avoid graph placeholders / raw dumps
+        if chart_data or timeline_data:
+            final_text = _clean_visualization_text(final_text)
+        # If we tried but couldn't generate a suitable visualization, append a brief
+        # data-literacy note explaining why a chart/timeline may not be appropriate.
+        if visualization_note and not (chart_data or timeline_data):
+            if final_text:
+                final_text = final_text.rstrip() + "\n\n" + visualization_note
+            else:
+                final_text = visualization_note
 
         return ChatResponse(
             agent=agent_display_name,

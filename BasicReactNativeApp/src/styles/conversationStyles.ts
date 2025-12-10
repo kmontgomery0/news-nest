@@ -278,5 +278,20 @@ export const conversationStyles = StyleSheet.create({
     fontFamily: 'Patrick Hand',
     textAlign: 'center',
   },
+  viewFullButton: {
+    alignSelf: 'flex-end',
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: border_light_gray_color,
+    backgroundColor: surface_white_color,
+  },
+  viewFullButtonText: {
+    fontSize: 11,
+    color: accent_indigo_light_color,
+    fontFamily: 'Patrick Hand',
+  },
 });
 

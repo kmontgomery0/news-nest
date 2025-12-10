@@ -11,8 +11,9 @@ import {
   Platform,
   Image,
   Animated,
+  Modal,
 } from 'react-native';
-import {Message, ConversationHistoryItem} from '../types';
+import {Message, ConversationHistoryItem, ChartData, TimelineData} from '../types';
 import {sendMessage, saveChatHistory} from '../services/api';
 import {splitIntoParagraphs} from '../utils/textUtils';
 import {getInitialChunk, getNextChunk, splitIntoMessageChunks} from '../utils/messageUtils';
@@ -88,6 +89,11 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   const streamingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const messageQueueIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const inputSlideAnim = useRef(new Animated.Value(100)).current;
+  const [expandedVisualization, setExpandedVisualization] = useState<{
+    type: 'chart' | 'timeline';
+    chart?: ChartData | null;
+    timeline?: TimelineData | null;
+  } | null>(null);
 
   // Format current date as "Nov 16, 2025"
   const formatDate = (): string => {
@@ -899,10 +905,40 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
                       )}
                     </Text>
                     {message.chart && (
-                      <Chart chartData={message.chart} />
+                      <>
+                        <Chart chartData={message.chart} />
+                        <TouchableOpacity
+                          style={conversationStyles.viewFullButton}
+                          onPress={() =>
+                            setExpandedVisualization({
+                              type: 'chart',
+                              chart: message.chart || null,
+                              timeline: null,
+                            })
+                          }>
+                          <Text style={conversationStyles.viewFullButtonText}>
+                            View full chart
+                          </Text>
+                        </TouchableOpacity>
+                      </>
                     )}
                     {message.timeline && (
-                      <Timeline timelineData={message.timeline} />
+                      <>
+                        <Timeline timelineData={message.timeline} />
+                        <TouchableOpacity
+                          style={conversationStyles.viewFullButton}
+                          onPress={() =>
+                            setExpandedVisualization({
+                              type: 'timeline',
+                              chart: null,
+                              timeline: message.timeline || null,
+                            })
+                          }>
+                          <Text style={conversationStyles.viewFullButtonText}>
+                            View full timeline
+                          </Text>
+                        </TouchableOpacity>
+                      </>
                     )}
                     {Array.isArray(message.articleCards) && message.articleCards.length > 0 && (
                       <View style={{marginTop: 8, gap: 12}}>
@@ -1019,6 +1055,92 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         </TouchableOpacity>
       </Animated.View>
       </KeyboardAvoidingView>
+      {/* Full-screen visualization modal */}
+      <Modal
+        visible={!!expandedVisualization}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setExpandedVisualization(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {expandedVisualization?.chart?.title ||
+                  expandedVisualization?.timeline?.title ||
+                  'Details'}
+              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setExpandedVisualization(null)}>
+                <Text style={styles.modalCloseButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.modalContent}
+              contentContainerStyle={{paddingBottom: 16}}
+              showsVerticalScrollIndicator={true}>
+              {expandedVisualization?.type === 'chart' &&
+                expandedVisualization.chart && (
+                  <Chart chartData={expandedVisualization.chart} />
+                )}
+              {expandedVisualization?.type === 'timeline' &&
+                expandedVisualization.timeline && (
+                  <Timeline timelineData={expandedVisualization.timeline} />
+                )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
       </View>
   );
 };
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 600,
+    maxHeight: '80%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#ddd',
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: text_primary_brown_color,
+  },
+  modalCloseButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  modalCloseButtonText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  modalContent: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
+});
+
