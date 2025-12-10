@@ -120,7 +120,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <View style={styles.welcomeSection}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatarCircle}>
-              <View style={styles.avatarFill} />
+              <Text style={styles.avatarText}>
+                {userName.charAt(0).toUpperCase()}
+              </Text>
             </View>
           </View>
           <View style={styles.welcomeTextContainer}>
@@ -206,11 +208,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: surface_white_color,
   },
-  avatarFill: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#D3D3D3',
+  avatarText: {
+    fontSize: 24,
+    fontFamily: 'Patrick Hand',
+    fontWeight: '700',
+    color: text_dark_gray_color,
   },
   welcomeTextContainer: {
     flex: 1,

@@ -130,12 +130,11 @@ export const conversationStyles = StyleSheet.create({
     left: -7,
     top: -7,
   },
-  userAvatarImage: {
-    width: 65,
-    height: 65,
-    position: 'absolute',
-    left: -10,
-    top: -10,
+  userAvatarText: {
+    fontSize: 20,
+    fontFamily: 'Patrick Hand',
+    fontWeight: '700',
+    color: text_dark_gray_color,
   },
   parrotImageShift: {
     width: 60,
