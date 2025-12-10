@@ -986,11 +986,9 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
               <View style={conversationStyles.messageRow}>
                 {isNewSpeaker ? (
                   <View style={conversationStyles.userAvatar}>
-                    <Image
-                      source={require('../assets/profilePlaceholder.png')}
-                      resizeMode="cover"
-                      style={conversationStyles.userAvatarImage}
-                    />
+                    <Text style={conversationStyles.userAvatarText}>
+                      {userName.charAt(0).toUpperCase()}
+                    </Text>
                   </View>
                 ) : (
                   <View style={{width: 46, marginRight: 10}} />
