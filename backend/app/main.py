@@ -25,6 +25,8 @@ def _clean_visualization_text(text: str) -> str:
     
     - Remove placeholder lines like "[GRAPH ... WILL BE GENERATED HERE]".
     - Remove JSON code blocks and raw JSON data.
+    - Remove markdown list formatting (bullets, numbered lists, nested lists).
+    - Remove markdown formatting (bold, italic).
     - Remove any trailing code, JSON, or extra formatting.
     - Trim down to the first couple of paragraphs to avoid ascii-style chart dumps.
     """
@@ -81,12 +83,34 @@ def _clean_visualization_text(text: str) -> str:
         # Skip lines that are just JSON keys/values
         if re.match(r'^\s*["\']?(title|description|data_points|events|x_axis|y_axis)["\']?\s*[:=]', lower):
             continue
+        
+        # Remove markdown list items (bullets, numbered lists, nested lists)
+        # This catches lines like "*   **18th Century:**" or "    *   Philosophers like..."
+        # Handle both unindented and indented list items
+        if re.match(r'^\s*([*\-]|\d+[.)])\s+', line):
+            continue
+        
+        # Remove lines that are just markdown formatting (bold/italic headers)
+        # This catches lines like "**18th Century: Early stirrings**"
+        if re.match(r'^\s*\*\*.*\*\*\s*$', line):
+            continue
+        
+        # Remove lines that start with indentation and contain list-like content
+        # This catches nested list items like "    *   Philosophers like..."
+        if re.match(r'^\s{2,}([*\-]|\d+[.)])\s+', line):
+            continue
             
         lines.append(line)
     
     cleaned = "\n".join(lines).strip()
     if not cleaned:
         return ""
+
+    # Remove markdown formatting (bold **text**, italic *text* or _text_)
+    # But preserve the text content
+    cleaned = re.sub(r'\*\*([^*]+)\*\*', r'\1', cleaned)  # Remove bold **text**
+    cleaned = re.sub(r'\*([^*]+)\*', r'\1', cleaned)  # Remove italic *text* (but not if it's part of **)
+    cleaned = re.sub(r'_([^_]+)_', r'\1', cleaned)  # Remove italic _text_
 
     # Remove any trailing fenced JSON/code block if present
     if "```" in cleaned:
