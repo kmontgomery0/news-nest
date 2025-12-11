@@ -82,8 +82,10 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   } | null>(null);
   const [pendingMessages, setPendingMessages] = useState<Message[]>([]);
   const [currentAgent, setCurrentAgent] = useState<string>(defaultAgentName);
-  const [routingTo, setRoutingTo] = useState<string | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState<string>('Processing query...');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const loadingTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
+  const isLoadingRef = useRef<boolean>(false);
   const [sessionBirdIds, setSessionBirdIds] = useState<string[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
   const streamingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -288,6 +290,9 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       if (messageQueueIntervalRef.current) {
         clearInterval(messageQueueIntervalRef.current);
       }
+      // Clear any pending loading message timeouts
+      loadingTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
+      loadingTimeoutsRef.current = [];
     };
   }, []);
 
@@ -607,8 +612,28 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     }
     setInputText('');
     setIsLoading(true);
-    // Clear any previous routing indicator
-    setRoutingTo(null);
+    isLoadingRef.current = true;
+    
+    // Clear any existing timeouts
+    loadingTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
+    loadingTimeoutsRef.current = [];
+    
+    // Simple progression: Processing query (2s) -> Thinking (3s) -> Generating response
+    setLoadingMessage('Processing query...');
+    
+    const timeout1 = setTimeout(() => {
+      if (isLoadingRef.current) {
+        setLoadingMessage('Thinking...');
+      }
+    }, 2000); // Show "Processing query" for 2 seconds
+    loadingTimeoutsRef.current.push(timeout1);
+    
+    const timeout2 = setTimeout(() => {
+      if (isLoadingRef.current) {
+        setLoadingMessage('Generating response...');
+      }
+    }, 5000); // Then show "Thinking" for 3 seconds (2s + 3s = 5s total), then "Generating response"
+    loadingTimeoutsRef.current.push(timeout2);
 
     try {
       // Send message with history (current message is NOT in history, backend will add it)
@@ -621,22 +646,8 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       // Show agent response - split into multiple message bubbles
       const agentName = data.agent || 'Agent';
       
-      // Check if we're routing to a different agent (before updating currentAgent)
-      // Use routed_from as the primary indicator, or check if agent changed
-      const isRouting = (data.routed_from || (agentName && agentName !== currentAgent));
-      
-      // Show routing indicator if switching to a different agent (while still loading)
-      if (isRouting && agentName && agentName !== currentAgent) {
-        console.log('[ConversationScreen] Showing routing indicator for:', agentName, 'from', currentAgent);
-        setRoutingTo(agentName);
-        // Update current agent state when routing
-        setCurrentAgent(agentName);
-        // Scroll to show routing indicator
-        setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({animated: true});
-        }, 100);
-      } else if (agentName && agentName !== currentAgent) {
-        // Update current agent even if not routing (e.g., first message)
+      // Update current agent if it changed
+      if (agentName && agentName !== currentAgent) {
         setCurrentAgent(agentName);
       }
       console.log('[ConversationScreen] Received response:', {
@@ -646,14 +657,8 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         has_article_reference: data.has_article_reference,
         responseLength: data.response?.length,
         allKeys: Object.keys(data),
-        isRouting,
-        routingTo,
       });
       
-      // If routing, add a delay to show the routing message
-      const delayBeforeShowingMessage = isRouting && routingTo ? 1500 : 0;
-      
-      setTimeout(() => {
       const chunks = splitIntoMessageChunks(data.response);
       
       if (chunks.length > 1) {
@@ -705,10 +710,12 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         });
       }
         
-        // Clear routing indicator and loading state after messages are added
-        setRoutingTo(null);
+        // Clear loading state after messages are added
         setIsLoading(false);
-      }, delayBeforeShowingMessage);
+        isLoadingRef.current = false;
+        // Clear any pending loading message timeouts
+        loadingTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
+        loadingTimeoutsRef.current = [];
     } catch (error) {
       const errorText = error instanceof Error
         ? error.message
@@ -721,6 +728,10 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       addMessage(errorMessage);
     } finally {
       setIsLoading(false);
+      isLoadingRef.current = false;
+      // Clear any pending loading message timeouts on error
+      loadingTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
+      loadingTimeoutsRef.current = [];
     }
   };
 
@@ -1020,7 +1031,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           <View style={conversationStyles.loadingContainer}>
             <ActivityIndicator size="small" color="#667eea" />
             <Text style={conversationStyles.loadingText}>
-              {routingTo ? `Routing to ${routingTo}...` : 'Thinking...'}
+              {loadingMessage}
             </Text>
           </View>
         )}
