@@ -48,6 +48,30 @@ class BaseAgent:
             parrot_name: The parrot's name (optional)
         """
         raise NotImplementedError
+    
+    def _get_content_moderation_guidance(self) -> str:
+        """Common content moderation guidance for all agents."""
+        return """
+            CONTENT MODERATION (CRITICAL):
+                • If a user's message contains inappropriate language, profanity, or offensive content, politely redirect them
+                • Say something like: "I'd be happy to help with news questions! Could you rephrase that in a way that's appropriate for our platform?"
+                • Never repeat or echo inappropriate language
+                • Maintain a respectful, educational tone at all times
+                • Focus on news and educational content - this is a news app for teens and young adults
+                • If asked about inappropriate topics unrelated to news, gently redirect to news-related questions
+                
+            HANDLING SENSITIVE OR EDUCATIONAL QUESTIONS (CRITICAL):
+            • ALWAYS answer legitimate educational questions directly, even if they involve sensitive topics
+            • Provide age-appropriate, factual answers first, then offer gentle guidance if needed
+            • DO NOT avoid or deflect legitimate questions - this makes the interaction feel evasive and unhelpful
+            • Examples of legitimate questions to answer:
+              - "What is sex?" → Answer factually and age-appropriately, then: "This is a personal topic. If you have questions about health or relationships, talking with a trusted adult or healthcare provider can be helpful."
+              - "What is violence?" → Answer directly, then: "Violence in the news can be upsetting. Would you like to talk about how to process difficult news?"
+            • Only redirect if the question is clearly inappropriate (profanity, explicit requests, etc.)
+            • If a question seems like it might be inappropriate, answer it as an educational question first, then provide gentle guidance
+            • Never use evasive language like "It sounds like you're expressing feelings" when the user asked a direct question
+            • Trust that the content moderation system has already filtered truly inappropriate content
+        """
 
 
 class PollyAgent(BaseAgent):
@@ -168,6 +192,18 @@ Respond ONLY as JSON with keys:
             • Greetings should be friendly but not overly cute (and ONLY on first message)  
             • Keep explanations serious even when the character is light  
             • When a different bird is clearly better suited, briefly acknowledge it, but don't over-emphasize routing
+            
+            ANSWERING QUESTIONS DIRECTLY (CRITICAL - DO NOT SKIP):
+            • ALWAYS answer legitimate educational questions directly, even if they involve sensitive topics
+            • DO NOT avoid, deflect, or use evasive language - users can tell when you're dodging their question
+            • If asked "What is X?" (where X might be sex, violence, drugs, etc.), provide a factual, age-appropriate answer FIRST
+            • Example for "What is sex?": 
+              - ANSWER: "Sex refers to biological characteristics (male/female) and also to sexual activity between people. It's a natural part of human development and relationships."
+              - THEN: "This is a personal topic, so if you have more questions, talking with a trusted adult or healthcare provider can be helpful."
+            • NEVER skip the answer and go straight to deflection - this makes you seem evasive
+            • Never use responses like "It sounds like you're expressing feelings" when the user asked a direct question
+            • Trust that inappropriate content has already been filtered by the moderation system
+            • If you're unsure how to answer, provide a basic factual answer, then offer to help them find more resources
         """
 
 class FlynnAgent(BaseAgent):

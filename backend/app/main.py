@@ -443,6 +443,18 @@ async def polly_welcome(api_key: Optional[str] = None):
 
 @app.post("/agents/chat", response_model=ChatResponse)
 async def chat_with_agent(request: ChatRequest):
+    # Content moderation: check if user message is appropriate
+    from .content_moderation import moderate_content
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    is_appropriate, moderation_reason = moderate_content(request.message, api_key=request.api_key)
+    if not is_appropriate:
+        logger.warning(f"[content_moderation] Blocked inappropriate message from agent '{request.agent}': {request.message[:100]}")
+        raise HTTPException(
+            status_code=400,
+            detail=moderation_reason or "Your message contains inappropriate content. Please rephrase your question in a respectful way."
+        )
     """Chat with a specific agent."""
     agent_name = request.agent.lower()
     
@@ -1203,6 +1215,18 @@ Respond ONLY with a JSON object in this exact format:
 
 @app.post("/agents/chat-and-route", response_model=ChatResponse)
 async def chat_with_routing(request: ChatRequest):
+    # Content moderation: check if user message is appropriate
+    from .content_moderation import moderate_content
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    is_appropriate, moderation_reason = moderate_content(request.message, api_key=request.api_key)
+    if not is_appropriate:
+        logger.warning(f"[content_moderation] Blocked inappropriate message in chat-and-route: {request.message[:100]}")
+        raise HTTPException(
+            status_code=400,
+            detail=moderation_reason or "Your message contains inappropriate content. Please rephrase your question in a respectful way."
+        )
     """Chat with automatic routing - returns routing message immediately, then specialist response."""
     api_key = request.api_key or get_gemini_api_key()
     
