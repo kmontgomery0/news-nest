@@ -10,6 +10,7 @@ import {Sidebar} from '../components/Sidebar';
 import {ProfileTab} from '../components/settings/ProfileTab';
 import {TopicsTab} from '../components/settings/TopicsTab';
 import {NotificationsTab} from '../components/settings/NotificationsTab';
+import {NotificationBar} from '../components/NotificationBar';
 import {settingsStyles} from '../styles/settingsStyles';
 import { getUserPreferences, saveUserPreferences } from '../services/api';
 
@@ -306,12 +307,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </View>
       </View>
 
-      {/* Saved toast */}
-      {showSaved && (
-        <View style={[settingsStyles.saveButton, {alignSelf: 'center', marginTop: 8, marginBottom: 4}]}>
-          <Text style={settingsStyles.saveButtonText}>Saved!</Text>
-        </View>
-      )}
+      {/* Notification bar */}
+      <NotificationBar
+        visible={showSaved}
+        message="Settings saved!"
+        duration={2000}
+        onHide={() => setShowSaved(false)}
+      />
 
       {/* Tab Navigation */}
       <View style={settingsStyles.tabBar}>
