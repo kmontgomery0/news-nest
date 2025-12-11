@@ -24,18 +24,31 @@ def _clean_visualization_text(text: str) -> str:
     Clean up LLM text when a chart or timeline visualization is attached.
     
     - Remove placeholder lines like "[GRAPH ... WILL BE GENERATED HERE]".
+    - Remove JSON code blocks and raw JSON data.
+    - Remove any trailing code, JSON, or extra formatting.
     - Trim down to the first couple of paragraphs to avoid ascii-style chart dumps.
     """
     if not text:
         return text
 
+    # Remove markdown code blocks (```json, ```, etc.) and their content
+    # This handles cases where LLM includes JSON code blocks in the response
+    text = re.sub(r'```[a-z]*\s*\{.*?\}\s*```', '', text, flags=re.DOTALL | re.IGNORECASE)
+    
     # If the whole thing is wrapped in a markdown code block, drop it entirely.
     stripped = text.strip()
     if stripped.startswith("```"):
         # Keep any text before the first fence, drop fenced content.
         parts = stripped.split("```", 1)
         pre = parts[0].strip()
-        return pre
+        if pre:
+            return pre
+        # If nothing before, try to find text after the code block
+        if len(parts) > 1:
+            after = parts[1].split("```", 1)
+            if len(after) > 1:
+                return after[1].strip()
+        return ""
 
     # Drop any placeholder "[GRAPH ...]" lines and obvious JSON chart blobs,
     # and remove outdated capability disclaimers about not being able to
@@ -43,34 +56,81 @@ def _clean_visualization_text(text: str) -> str:
     lines = []
     for line in text.splitlines():
         lower = line.lower().strip()
-        if "[graph" in lower:
+        
+        # Skip empty lines after we've started cleaning
+        if not lower and len(lines) == 0:
             continue
+            
+        # Remove graph/chart placeholders
+        if "[graph" in lower or "[chart" in lower or "[visualization" in lower:
+            continue
+            
         # Remove common "I can't show charts" style sentences
         if (
             "as an ai" in lower
             and ("cannot display" in lower or "not able to" in lower or "can't" in lower)
         ) or "not able to generate visual" in lower or "can't actually display" in lower:
             continue
-        # Drop standalone JSON-looking chart configs
+            
+        # Drop standalone JSON-looking chart configs (lines that are just JSON)
         if lower.startswith("{") and lower.endswith("}"):
+            # Check if it looks like chart/timeline JSON
+            if "data_points" in lower or "events" in lower or "title" in lower:
+                continue
+                
+        # Skip lines that are just JSON keys/values
+        if re.match(r'^\s*["\']?(title|description|data_points|events|x_axis|y_axis)["\']?\s*[:=]', lower):
             continue
+            
         lines.append(line)
+    
     cleaned = "\n".join(lines).strip()
     if not cleaned:
         return ""
 
     # Remove any trailing fenced JSON/code block if present
     if "```" in cleaned:
+        # Split on first code fence and take only what's before it
         cleaned = cleaned.split("```", 1)[0].strip()
         if not cleaned:
             return ""
+    
+    # Remove any trailing JSON objects that might have been missed
+    # Look for JSON-like structures at the end
+    cleaned = re.sub(r'\s*\{[^{}]*"title"[^{}]*\{[^{}]*\}[^{}]*\}\s*$', '', cleaned, flags=re.DOTALL)
+    cleaned = cleaned.strip()
+    
+    # Remove trailing markdown formatting
+    cleaned = re.sub(r'\s*```.*$', '', cleaned, flags=re.DOTALL)
+    cleaned = cleaned.strip()
 
     # Keep at most the first 2–3 paragraphs so we don't show raw value dumps
     paragraphs = [p.strip() for p in cleaned.split("\n\n") if p.strip()]
     if not paragraphs:
         return cleaned
-    # 2 is usually enough; 3 as an upper bound for context
-    kept = "\n\n".join(paragraphs[:3])
+    
+    # Filter out paragraphs that look like JSON or code
+    filtered_paragraphs = []
+    for para in paragraphs:
+        para_lower = para.lower().strip()
+        # Skip paragraphs that are mostly JSON
+        if para_lower.startswith("{") or para_lower.startswith("["):
+            continue
+        # Skip paragraphs that are just code blocks
+        if para_lower.startswith("```"):
+            continue
+        # Skip very short paragraphs that are just formatting
+        if len(para.strip()) < 10 and any(c in para for c in ["{", "}", "[", "]", "```"]):
+            continue
+        filtered_paragraphs.append(para)
+        # Stop after 2-3 good paragraphs
+        if len(filtered_paragraphs) >= 3:
+            break
+    
+    if not filtered_paragraphs:
+        return cleaned
+    
+    kept = "\n\n".join(filtered_paragraphs)
     return kept.strip()
 
 
