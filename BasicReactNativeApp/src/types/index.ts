@@ -90,6 +90,7 @@ export interface Message {
   }[];
   chart?: ChartData | null;
   timeline?: TimelineData | null;
+  scoreboard?: SportsScoreboardResponse | null;
 }
 
 export interface ChatResponse {

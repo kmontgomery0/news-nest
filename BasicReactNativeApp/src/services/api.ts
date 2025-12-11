@@ -197,8 +197,14 @@ export const getAgents = async () => {
 
 /**
  * Save a complete chat history when a user leaves a chat.
+ * If sessionId is provided, updates the existing session; otherwise creates a new one.
  */
-export const saveChatHistory = async (email: string, history: ConversationHistoryItem[], parrotName?: string) => {
+export const saveChatHistory = async (
+  email: string, 
+  history: ConversationHistoryItem[], 
+  parrotName?: string,
+  sessionId?: string
+) => {
   const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.CHATS_SAVE}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -206,6 +212,7 @@ export const saveChatHistory = async (email: string, history: ConversationHistor
       email,
       history,
       parrot_name: parrotName || undefined,
+      session_id: sessionId || undefined,
     }),
   });
   const data = await response.json();

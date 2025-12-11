@@ -824,6 +824,7 @@ class SaveChatRequest(BaseModel):
     email: str
     history: List[Dict[str, Any]]
     parrot_name: Optional[str] = None
+    session_id: Optional[str] = None  # If provided, update existing session instead of creating new one
 
 
 def extract_birds_from_history(history: List[Dict[str, Any]]) -> List[str]:
@@ -917,6 +918,7 @@ def save_chat(payload: SaveChatRequest):
     """
     Persist a chat session with a descriptive title and involved birds.
     'history' should be a list of items like { role: 'user'|'model', parts: [text] }.
+    If session_id is provided, updates the existing session; otherwise creates a new one.
     """
     email = (payload.email or "").strip().lower()
     if not email:
@@ -924,10 +926,49 @@ def save_chat(payload: SaveChatRequest):
     history = payload.history or []
     if not isinstance(history, list) or len(history) == 0:
         raise HTTPException(status_code=400, detail="History must be a non-empty list.")
+    
+    coll = get_chat_sessions_collection()
+    now = datetime.now(timezone.utc)
+    
     # Generate title and birds
     birds = extract_birds_from_history(history)
     title = generate_chat_title(history, parrot_name=payload.parrot_name)
-    now = datetime.now(timezone.utc)
+    
+    # If session_id is provided, update existing session
+    if payload.session_id:
+        try:
+            from bson import ObjectId
+            session_oid = ObjectId(payload.session_id)
+            # Verify the session belongs to this user
+            existing = coll.find_one({"_id": session_oid, "email": email})
+            if not existing:
+                raise HTTPException(status_code=404, detail="Chat session not found or access denied.")
+            
+            # Update the existing session
+            update_doc = {
+                "$set": {
+                    "title": title,
+                    "birds": birds,
+                    "messages": history,
+                    "updated_at": now,
+                }
+            }
+            coll.update_one({"_id": session_oid, "email": email}, update_doc)
+            
+            return {
+                "success": True,
+                "id": payload.session_id,
+                "title": title,
+                "birds": birds,
+            }
+        except Exception as e:
+            # If ObjectId is invalid or update fails, fall through to create new session
+            if isinstance(e, HTTPException):
+                raise
+            # Invalid session_id format - create new session instead
+            pass
+    
+    # Create new session
     doc = {
         "email": email,
         "title": title,
@@ -936,7 +977,6 @@ def save_chat(payload: SaveChatRequest):
         "created_at": now,
         "updated_at": now,
     }
-    coll = get_chat_sessions_collection()
     result = coll.insert_one(doc)
     return {
         "success": True,

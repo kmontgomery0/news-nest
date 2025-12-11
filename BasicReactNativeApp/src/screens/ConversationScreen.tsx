@@ -13,7 +13,7 @@ import {
   Animated,
   Modal,
 } from 'react-native';
-import {Message, ConversationHistoryItem, ChartData, TimelineData} from '../types';
+import {Message, ConversationHistoryItem, ChartData, TimelineData, SportsScoreboardResponse} from '../types';
 import {sendMessage, saveChatHistory} from '../services/api';
 import {splitIntoParagraphs} from '../utils/textUtils';
 import {getInitialChunk, getNextChunk, splitIntoMessageChunks} from '../utils/messageUtils';
@@ -71,6 +71,8 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           agentName: defaultAgentName,
         }]
   );
+  // Track the current chat session ID (from props or set when saving)
+  const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(sessionId);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingHistory, setIsSavingHistory] = useState(false);
@@ -138,6 +140,8 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         if (!email || !sessionId) return;
         const { getChatSession } = await import('../services/api');
         const data = await getChatSession(email, sessionId);
+        // Store the session ID so we can update this session later
+        setCurrentSessionId(sessionId);
         const history = Array.isArray(data?.messages) ? data.messages : [];
         // Persist birds involved in this session for header display
         if (Array.isArray((data as any)?.birds)) {
@@ -202,6 +206,165 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
             return { cleaned: input, cards: [] };
           }
         };
+
+        // Helper to extract JSON object from text (handles nested braces)
+        const extractJsonObject = (text: string, startIdx: number): { json: string; endIdx: number } | null => {
+          let braceCount = 0;
+          let inString = false;
+          let escapeNext = false;
+          let jsonStart = -1;
+          
+          for (let i = startIdx; i < text.length; i++) {
+            const char = text[i];
+            
+            if (escapeNext) {
+              escapeNext = false;
+              continue;
+            }
+            
+            if (char === '\\') {
+              escapeNext = true;
+              continue;
+            }
+            
+            if (char === '"') {
+              inString = !inString;
+              continue;
+            }
+            
+            if (inString) continue;
+            
+            if (char === '{') {
+              if (jsonStart === -1) jsonStart = i;
+              braceCount++;
+            } else if (char === '}') {
+              braceCount--;
+              if (braceCount === 0 && jsonStart !== -1) {
+                return {
+                  json: text.substring(jsonStart, i + 1),
+                  endIdx: i + 1,
+                };
+              }
+            }
+          }
+          
+          return null;
+        };
+
+        // Helper to parse saved [CHART], [TIMELINE], and [SCOREBOARD] blocks
+        const parseSavedVisualizations = (input: string): { 
+          cleaned: string; 
+          chart: ChartData | null; 
+          timeline: TimelineData | null;
+          scoreboard: SportsScoreboardResponse | null;
+        } => {
+          try {
+            if (!input) return { cleaned: input, chart: null, timeline: null, scoreboard: null };
+            let cleaned = input;
+            let chart: ChartData | null = null;
+            let timeline: TimelineData | null = null;
+            let scoreboard: SportsScoreboardResponse | null = null;
+
+            // Parse [CHART] block
+            const chartMarkerIdx = cleaned.indexOf('[CHART]');
+            if (chartMarkerIdx !== -1) {
+              // Find the newline after [CHART]
+              const afterMarker = cleaned.substring(chartMarkerIdx + '[CHART]'.length);
+              const newlineIdx = afterMarker.search(/\n/);
+              if (newlineIdx !== -1) {
+                const jsonStartIdx = chartMarkerIdx + '[CHART]'.length + newlineIdx + 1;
+                const jsonResult = extractJsonObject(cleaned, jsonStartIdx);
+                if (jsonResult) {
+                  try {
+                    chart = JSON.parse(jsonResult.json) as ChartData;
+                    // Remove the entire [CHART] block including marker and JSON
+                    const blockEnd = jsonResult.endIdx;
+                    // Also remove any trailing whitespace/newlines
+                    const afterJson = cleaned.substring(blockEnd);
+                    const trailingWhitespace = afterJson.match(/^\s*/)?.[0] || '';
+                    const removeEnd = blockEnd + trailingWhitespace.length;
+                    cleaned = cleaned.substring(0, chartMarkerIdx).trim() + 
+                             (removeEnd < cleaned.length ? cleaned.substring(removeEnd) : '');
+                    cleaned = cleaned.trim();
+                  } catch (e) {
+                    console.warn('Failed to parse saved chart:', e);
+                    // Remove the block even if parsing failed
+                    const blockEnd = jsonResult.endIdx;
+                    cleaned = cleaned.substring(0, chartMarkerIdx).trim() + 
+                             (blockEnd < cleaned.length ? cleaned.substring(blockEnd) : '');
+                    cleaned = cleaned.trim();
+                  }
+                }
+              }
+            }
+
+            // Parse [TIMELINE] block - same approach
+            const timelineMarkerIdx = cleaned.indexOf('[TIMELINE]');
+            if (timelineMarkerIdx !== -1) {
+              const afterMarker = cleaned.substring(timelineMarkerIdx + '[TIMELINE]'.length);
+              const newlineIdx = afterMarker.search(/\n/);
+              if (newlineIdx !== -1) {
+                const jsonStartIdx = timelineMarkerIdx + '[TIMELINE]'.length + newlineIdx + 1;
+                const jsonResult = extractJsonObject(cleaned, jsonStartIdx);
+                if (jsonResult) {
+                  try {
+                    timeline = JSON.parse(jsonResult.json) as TimelineData;
+                    // Remove the entire [TIMELINE] block
+                    const blockEnd = jsonResult.endIdx;
+                    const afterJson = cleaned.substring(blockEnd);
+                    const trailingWhitespace = afterJson.match(/^\s*/)?.[0] || '';
+                    const removeEnd = blockEnd + trailingWhitespace.length;
+                    cleaned = cleaned.substring(0, timelineMarkerIdx).trim() + 
+                             (removeEnd < cleaned.length ? cleaned.substring(removeEnd) : '');
+                    cleaned = cleaned.trim();
+                  } catch (e) {
+                    console.warn('Failed to parse saved timeline:', e);
+                    // Remove the block even if parsing failed
+                    const blockEnd = jsonResult.endIdx;
+                    cleaned = cleaned.substring(0, timelineMarkerIdx).trim() + 
+                             (blockEnd < cleaned.length ? cleaned.substring(blockEnd) : '');
+                    cleaned = cleaned.trim();
+                  }
+                }
+              }
+            }
+
+            // Parse [SCOREBOARD] block - same approach
+            const scoreboardMarkerIdx = cleaned.indexOf('[SCOREBOARD]');
+            if (scoreboardMarkerIdx !== -1) {
+              const afterMarker = cleaned.substring(scoreboardMarkerIdx + '[SCOREBOARD]'.length);
+              const newlineIdx = afterMarker.search(/\n/);
+              if (newlineIdx !== -1) {
+                const jsonStartIdx = scoreboardMarkerIdx + '[SCOREBOARD]'.length + newlineIdx + 1;
+                const jsonResult = extractJsonObject(cleaned, jsonStartIdx);
+                if (jsonResult) {
+                  try {
+                    scoreboard = JSON.parse(jsonResult.json) as SportsScoreboardResponse;
+                    // Remove the entire [SCOREBOARD] block
+                    const blockEnd = jsonResult.endIdx;
+                    const afterJson = cleaned.substring(blockEnd);
+                    const trailingWhitespace = afterJson.match(/^\s*/)?.[0] || '';
+                    const removeEnd = blockEnd + trailingWhitespace.length;
+                    cleaned = cleaned.substring(0, scoreboardMarkerIdx).trim() + 
+                             (removeEnd < cleaned.length ? cleaned.substring(removeEnd) : '');
+                    cleaned = cleaned.trim();
+                  } catch (e) {
+                    console.warn('Failed to parse saved scoreboard:', e);
+                    // Remove the block even if parsing failed
+                    const blockEnd = jsonResult.endIdx;
+                    cleaned = cleaned.substring(0, scoreboardMarkerIdx).trim() + 
+                             (blockEnd < cleaned.length ? cleaned.substring(blockEnd) : '');
+                    cleaned = cleaned.trim();
+                  }
+                }
+              }
+            }
+
+            return { cleaned, chart, timeline, scoreboard };
+          } catch {
+            return { cleaned: input, chart: null, timeline: null, scoreboard: null };
+          }
+        };
         history.forEach((h, idx) => {
           const text = Array.isArray(h.parts) ? h.parts.map(p => String(p)).join(' ') : '';
           if (h.role === 'user') {
@@ -214,16 +377,34 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
             // extract agent name from metadata [Agent: Name]
             const match = text.match(/\[Agent:\s*([^\]]+)\]\s*$/i);
             const agentName = match ? match[1].trim() : undefined;
-            const cleanedPre = text.replace(/\s*\[Agent:\s*[^\]]+\]\s*$/i, '').trim();
+            let cleanedPre = text.replace(/\s*\[Agent:\s*[^\]]+\]\s*$/i, '').trim();
+            
+            // Parse visualizations first (they come before articles in the text)
+            const vizParsed = parseSavedVisualizations(cleanedPre);
+            cleanedPre = vizParsed.cleaned;
+            
+            // Then parse articles from the cleaned text
             const parsed = parseSavedArticlesBlock(cleanedPre);
             const cleaned = parsed.cleaned.trim();
+            
             if (agentName) lastAgentNameLocal = agentName;
-            loaded.push({
-              id: `agent-${idx}-${Date.now()}`,
-              type: 'agent',
-              text: cleaned,
-              agentName: agentName || lastAgentNameLocal || defaultAgentName,
-              articleCards: parsed.cards && parsed.cards.length > 0 ? parsed.cards : undefined,
+            
+            // Split the cleaned text into message chunks (like when receiving new responses)
+            const chunks = splitIntoMessageChunks(cleaned);
+            
+            // Create message bubbles - attach chart/timeline/scoreboard/articles only to first chunk
+            chunks.forEach((chunk, chunkIdx) => {
+              loaded.push({
+                id: `agent-${idx}-${chunkIdx}-${Date.now()}`,
+                type: 'agent',
+                text: chunk,
+                agentName: agentName || lastAgentNameLocal || defaultAgentName,
+                // Only attach chart/timeline/scoreboard/articles to first chunk
+                chart: chunkIdx === 0 ? vizParsed.chart : null,
+                timeline: chunkIdx === 0 ? vizParsed.timeline : null,
+                scoreboard: chunkIdx === 0 ? vizParsed.scoreboard : null,
+                articleCards: chunkIdx === 0 && parsed.cards && parsed.cards.length > 0 ? parsed.cards : undefined,
+              });
             });
           }
         });
@@ -410,6 +591,33 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     }
   };
 
+  const formatChartForLog = (chart: ChartData): string => {
+    try {
+      const jsonStr = JSON.stringify(chart);
+      return `[CHART]\n${jsonStr}`;
+    } catch {
+      return '';
+    }
+  };
+
+  const formatTimelineForLog = (timeline: TimelineData): string => {
+    try {
+      const jsonStr = JSON.stringify(timeline);
+      return `[TIMELINE]\n${jsonStr}`;
+    } catch {
+      return '';
+    }
+  };
+
+  const formatScoreboardForLog = (scoreboard: SportsScoreboardResponse): string => {
+    try {
+      const jsonStr = JSON.stringify(scoreboard);
+      return `[SCOREBOARD]\n${jsonStr}`;
+    } catch {
+      return '';
+    }
+  };
+
   // Progressive message queue revelation (for multiple message bubbles)
   useEffect(() => {
     if (pendingMessages.length === 0) {
@@ -535,13 +743,52 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         }
         // Collect agent response chunks (they may be split into multiple messages)
         let textToStore = msg.text;
-        // Append a compact, textual representation of any article cards for logging/history
-        if (Array.isArray(msg.articleCards) && msg.articleCards.length > 0) {
-          const cardsBlock = formatArticleCardsForLog(msg.articleCards);
-          if (cardsBlock) {
-            textToStore = textToStore ? `${textToStore}\n\n${cardsBlock}` : cardsBlock;
+        
+        // Track if we've already added chart/timeline/scoreboard to avoid duplicates
+        // (since chunks may have the same chart/timeline/scoreboard)
+        const hasChart = msg.chart !== null && msg.chart !== undefined;
+        const hasTimeline = msg.timeline !== null && msg.timeline !== undefined;
+        const hasScoreboard = msg.scoreboard !== null && msg.scoreboard !== undefined;
+        const hasArticles = Array.isArray(msg.articleCards) && msg.articleCards.length > 0;
+        
+        // Only add visualizations/articles if this is the first chunk or if we haven't seen them yet
+        // We'll track this by checking if currentAgentResponse is empty (first chunk)
+        const isFirstChunk = currentAgentResponse.length === 0;
+        
+        if (isFirstChunk) {
+          // Append chart data if present (only once, in first chunk)
+          if (hasChart) {
+            const chartBlock = formatChartForLog(msg.chart!);
+            if (chartBlock) {
+              textToStore = textToStore ? `${textToStore}\n\n${chartBlock}` : chartBlock;
+            }
+          }
+          
+          // Append timeline data if present (only once, in first chunk)
+          if (hasTimeline) {
+            const timelineBlock = formatTimelineForLog(msg.timeline!);
+            if (timelineBlock) {
+              textToStore = textToStore ? `${textToStore}\n\n${timelineBlock}` : timelineBlock;
+            }
+          }
+          
+          // Append scoreboard data if present (only once, in first chunk)
+          if (hasScoreboard) {
+            const scoreboardBlock = formatScoreboardForLog(msg.scoreboard!);
+            if (scoreboardBlock) {
+              textToStore = textToStore ? `${textToStore}\n\n${scoreboardBlock}` : scoreboardBlock;
+            }
+          }
+          
+          // Append a compact, textual representation of any article cards for logging/history
+          if (hasArticles) {
+            const cardsBlock = formatArticleCardsForLog(msg.articleCards!);
+            if (cardsBlock) {
+              textToStore = textToStore ? `${textToStore}\n\n${cardsBlock}` : cardsBlock;
+            }
           }
         }
+        
         currentAgentResponse.push(textToStore);
       }
     }
@@ -572,7 +819,11 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       const hasAgent = history.some(h => h.role === 'model');
       if (!hasUser || !hasAgent) return;
       setIsSavingHistory(true);
-      await saveChatHistory(email, history, parrotName);
+      const result = await saveChatHistory(email, history, parrotName, currentSessionId);
+      // Update the session ID if this was a new session
+      if (result.id && !currentSessionId) {
+        setCurrentSessionId(result.id);
+      }
     } catch (e) {
       // non-blocking
       console.warn('persistChatOnLeave error', e);
